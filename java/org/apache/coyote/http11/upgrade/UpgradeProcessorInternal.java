@@ -17,23 +17,28 @@
 package org.apache.coyote.http11.upgrade;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 
 import javax.servlet.ServletInputStream;
 import javax.servlet.ServletOutputStream;
 
+import org.apache.coyote.UpgradeToken;
+import org.apache.juli.logging.Log;
+import org.apache.juli.logging.LogFactory;
 import org.apache.tomcat.util.net.AbstractEndpoint.Handler.SocketState;
-import org.apache.tomcat.util.net.SocketStatus;
+import org.apache.tomcat.util.net.SSLSupport;
+import org.apache.tomcat.util.net.SocketEvent;
 import org.apache.tomcat.util.net.SocketWrapperBase;
 
 public class UpgradeProcessorInternal extends UpgradeProcessorBase {
 
+    private static final Log log = LogFactory.getLog(UpgradeProcessorInternal.class);
+
     private final InternalHttpUpgradeHandler internalHttpUpgradeHandler;
 
-    public UpgradeProcessorInternal(SocketWrapperBase<?> wrapper, ByteBuffer leftOverInput,
-            InternalHttpUpgradeHandler internalHttpUpgradeHandler) {
-        super(wrapper, leftOverInput, internalHttpUpgradeHandler);
-        this.internalHttpUpgradeHandler = internalHttpUpgradeHandler;
+    public UpgradeProcessorInternal(SocketWrapperBase<?> wrapper,
+            UpgradeToken upgradeToken) {
+        super(upgradeToken);
+        this.internalHttpUpgradeHandler = (InternalHttpUpgradeHandler) upgradeToken.getHttpUpgradeHandler();
         /*
          * Leave timeouts in the hands of the upgraded protocol.
          */
@@ -45,8 +50,26 @@ public class UpgradeProcessorInternal extends UpgradeProcessorBase {
 
 
     @Override
-    public SocketState dispatch(SocketStatus status) {
+    public SocketState dispatch(SocketEvent status) {
         return internalHttpUpgradeHandler.upgradeDispatch(status);
+    }
+
+
+    @Override
+    public final void setSslSupport(SSLSupport sslSupport) {
+        internalHttpUpgradeHandler.setSslSupport(sslSupport);
+    }
+
+
+    @Override
+    public void pause() {
+        internalHttpUpgradeHandler.pause();
+    }
+
+
+    @Override
+    protected Log getLog() {
+        return log;
     }
 
 

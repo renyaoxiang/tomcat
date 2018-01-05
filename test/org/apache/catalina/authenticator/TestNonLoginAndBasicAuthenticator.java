@@ -24,9 +24,7 @@ import java.util.Map;
 
 import javax.servlet.http.HttpServletResponse;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
+import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.catalina.Context;
@@ -75,15 +73,14 @@ public class TestNonLoginAndBasicAuthenticator extends TomcatBaseTest {
     private static final String URI_PROTECTED = "/protected";
     private static final String URI_PUBLIC = "/anyoneCanAccess";
 
-    private static final int SHORT_SESSION_TIMEOUT_MINS = 1;
-    private static final int LONG_SESSION_TIMEOUT_MINS = 2;
-    private static final int MANAGER_SCAN_INTERVAL_SECS = 10;
+    private static final int SHORT_SESSION_TIMEOUT_SECS = 1;
+    private static final int MANAGER_SCAN_INTERVAL_SECS = 2;
     private static final int MANAGER_EXPIRE_SESSIONS_FAST = 1;
     private static final int EXTRA_DELAY_SECS = 5;
     private static final long TIMEOUT_DELAY_MSECS =
-            (((SHORT_SESSION_TIMEOUT_MINS * 60)
-            + (MANAGER_SCAN_INTERVAL_SECS * MANAGER_EXPIRE_SESSIONS_FAST)
-            + EXTRA_DELAY_SECS) * 1000);
+            ((SHORT_SESSION_TIMEOUT_SECS +
+                    (MANAGER_SCAN_INTERVAL_SECS * MANAGER_EXPIRE_SESSIONS_FAST) +
+                    EXTRA_DELAY_SECS) * 1000);
 
     private static final String CLIENT_AUTH_HEADER = "authorization";
     private static final String SERVER_AUTH_HEADER = "WWW-Authenticate";
@@ -287,6 +284,11 @@ public class TestNonLoginAndBasicAuthenticator extends TomcatBaseTest {
         doTestBasic(CONTEXT_PATH_LOGIN + URI_PROTECTED, NO_CREDENTIALS,
                 USE_COOKIES, HttpServletResponse.SC_OK);
 
+        // Force session to expire one second from now
+        forceSessionMaxInactiveInterval(
+                (Context) getTomcatInstance().getHost().findChild(CONTEXT_PATH_LOGIN),
+                SHORT_SESSION_TIMEOUT_SECS);
+
         // allow the session to time out and lose authentication
         Thread.sleep(TIMEOUT_DELAY_MSECS);
 
@@ -303,7 +305,7 @@ public class TestNonLoginAndBasicAuthenticator extends TomcatBaseTest {
 
         // slightly paranoid verification
         boolean sameCookies = originalCookies.equals(cookies);
-        assertTrue(!sameCookies);
+        Assert.assertTrue(!sameCookies);
     }
 
     /*
@@ -356,8 +358,8 @@ public class TestNonLoginAndBasicAuthenticator extends TomcatBaseTest {
         Map<String,List<String>> reqHeaders = new HashMap<>();
         Map<String,List<String>> respHeaders = new HashMap<>();
 
-        if (useCookie && (cookies != null)) {
-            reqHeaders.put(CLIENT_COOKIE_HEADER + ":", cookies);
+        if (useCookie) {
+            addCookies(reqHeaders);
         }
 
         ByteChunk bc = new ByteChunk();
@@ -365,11 +367,11 @@ public class TestNonLoginAndBasicAuthenticator extends TomcatBaseTest {
                 respHeaders);
 
         if (expectedRC != HttpServletResponse.SC_OK) {
-            assertEquals(expectedRC, rc);
-            assertTrue(bc.getLength() > 0);
+            Assert.assertEquals(expectedRC, rc);
+            Assert.assertTrue(bc.getLength() > 0);
         }
         else {
-            assertEquals("OK", bc.toString());
+            Assert.assertEquals("OK", bc.toString());
         }
     }
 
@@ -379,8 +381,8 @@ public class TestNonLoginAndBasicAuthenticator extends TomcatBaseTest {
         Map<String,List<String>> reqHeaders = new HashMap<>();
         Map<String,List<String>> respHeaders = new HashMap<>();
 
-        if (useCookie && (cookies != null)) {
-            reqHeaders.put(CLIENT_COOKIE_HEADER + ":", cookies);
+        if (useCookie) {
+            addCookies(reqHeaders);
         }
         else {
             if (credentials != null) {
@@ -395,27 +397,27 @@ public class TestNonLoginAndBasicAuthenticator extends TomcatBaseTest {
                 respHeaders);
 
         if (expectedRC != HttpServletResponse.SC_OK) {
-            assertEquals(expectedRC, rc);
-            assertTrue(bc.getLength() > 0);
+            Assert.assertEquals(expectedRC, rc);
+            Assert.assertTrue(bc.getLength() > 0);
             if (expectedRC == HttpServletResponse.SC_UNAUTHORIZED) {
                 // The server should identify the acceptable method(s)
                 boolean methodFound = false;
                 List<String> authHeaders = respHeaders.get(SERVER_AUTH_HEADER);
                 for (String authHeader : authHeaders) {
-                    if (authHeader.indexOf(NICE_METHOD) > -1) {
+                    if (authHeader.contains(NICE_METHOD)) {
                         methodFound = true;
                         break;
                     }
                 }
-                assertTrue(methodFound);
+                Assert.assertTrue(methodFound);
             }
         }
         else {
-            assertEquals("OK", bc.toString());
+            Assert.assertEquals("OK", bc.toString());
             List<String> newCookies = respHeaders.get(SERVER_COOKIE_HEADER);
             if (newCookies != null) {
                 // harvest cookies whenever the server sends some new ones
-                cookies = newCookies;
+                saveCookies(respHeaders);
             }
         }
     }
@@ -451,14 +453,13 @@ public class TestNonLoginAndBasicAuthenticator extends TomcatBaseTest {
         // Must have a real docBase for webapps - just use temp
         nonloginContext = tomcat.addContext(CONTEXT_PATH_NOLOGIN,
                 System.getProperty("java.io.tmpdir"));
-        nonloginContext.setSessionTimeout(LONG_SESSION_TIMEOUT_MINS);
 
         // Add protected servlet to the context
         Tomcat.addServlet(nonloginContext, "TesterServlet1", new TesterServlet());
-        nonloginContext.addServletMapping(URI_PROTECTED, "TesterServlet1");
+        nonloginContext.addServletMappingDecoded(URI_PROTECTED, "TesterServlet1");
 
         SecurityCollection collection1 = new SecurityCollection();
-        collection1.addPattern(URI_PROTECTED);
+        collection1.addPatternDecoded(URI_PROTECTED);
         SecurityConstraint sc1 = new SecurityConstraint();
         sc1.addAuthRole(ROLE);
         sc1.addCollection(collection1);
@@ -466,10 +467,10 @@ public class TestNonLoginAndBasicAuthenticator extends TomcatBaseTest {
 
         // Add unprotected servlet to the context
         Tomcat.addServlet(nonloginContext, "TesterServlet2", new TesterServlet());
-        nonloginContext.addServletMapping(URI_PUBLIC, "TesterServlet2");
+        nonloginContext.addServletMappingDecoded(URI_PUBLIC, "TesterServlet2");
 
         SecurityCollection collection2 = new SecurityCollection();
-        collection2.addPattern(URI_PUBLIC);
+        collection2.addPatternDecoded(URI_PUBLIC);
         SecurityConstraint sc2 = new SecurityConstraint();
         // do not add a role - which signals access permitted without one
         sc2.addCollection(collection2);
@@ -488,13 +489,12 @@ public class TestNonLoginAndBasicAuthenticator extends TomcatBaseTest {
         // Must have a real docBase for webapps - just use temp
         basicContext = tomcat.addContext(CONTEXT_PATH_LOGIN,
                 System.getProperty("java.io.tmpdir"));
-        basicContext.setSessionTimeout(SHORT_SESSION_TIMEOUT_MINS);
 
         // Add protected servlet to the context
         Tomcat.addServlet(basicContext, "TesterServlet3", new TesterServlet());
-        basicContext.addServletMapping(URI_PROTECTED, "TesterServlet3");
+        basicContext.addServletMappingDecoded(URI_PROTECTED, "TesterServlet3");
         SecurityCollection collection = new SecurityCollection();
-        collection.addPattern(URI_PROTECTED);
+        collection.addPatternDecoded(URI_PROTECTED);
         SecurityConstraint sc = new SecurityConstraint();
         sc.addAuthRole(ROLE);
         sc.addCollection(collection);
@@ -502,10 +502,10 @@ public class TestNonLoginAndBasicAuthenticator extends TomcatBaseTest {
 
         // Add unprotected servlet to the context
         Tomcat.addServlet(basicContext, "TesterServlet4", new TesterServlet());
-        basicContext.addServletMapping(URI_PUBLIC, "TesterServlet4");
+        basicContext.addServletMappingDecoded(URI_PUBLIC, "TesterServlet4");
 
         SecurityCollection collection2 = new SecurityCollection();
-        collection2.addPattern(URI_PUBLIC);
+        collection2.addPatternDecoded(URI_PUBLIC);
         SecurityConstraint sc2 = new SecurityConstraint();
         // do not add a role - which signals access permitted without one
         sc2.addCollection(collection2);
@@ -536,7 +536,8 @@ public class TestNonLoginAndBasicAuthenticator extends TomcatBaseTest {
      * with a session expiry scan every 6 cycles.
      */
     private void setRapidSessionTimeout() {
-
+        basicContext.getParent().getParent().setBackgroundProcessorDelay(
+                MANAGER_SCAN_INTERVAL_SECS);
         ((ManagerBase) basicContext.getManager())
                 .setProcessExpiresFrequency(MANAGER_EXPIRE_SESSIONS_FAST);
     }
@@ -566,6 +567,43 @@ public class TestNonLoginAndBasicAuthenticator extends TomcatBaseTest {
 
         private String getCredentials() {
             return credentials;
+        }
+    }
+
+    /*
+     * extract and save the server cookies from the incoming response
+     */
+    protected void saveCookies(Map<String,List<String>> respHeaders) {
+        // we only save the Cookie values, not header prefix
+        List<String> cookieHeaders = respHeaders.get(SERVER_COOKIE_HEADER);
+        if (cookieHeaders == null) {
+            cookies = null;
+        } else {
+            cookies = new ArrayList<>(cookieHeaders.size());
+            for (String cookieHeader : cookieHeaders) {
+                cookies.add(cookieHeader.substring(0, cookieHeader.indexOf(';')));
+            }
+        }
+    }
+
+    /*
+     * add all saved cookies to the outgoing request
+     */
+    protected void addCookies(Map<String,List<String>> reqHeaders) {
+        if ((cookies != null) && (cookies.size() > 0)) {
+            StringBuilder cookieHeader = new StringBuilder();
+            boolean first = true;
+            for (String cookie : cookies) {
+                if (!first) {
+                    cookieHeader.append(';');
+                } else {
+                    first = false;
+                }
+                cookieHeader.append(cookie);
+            }
+            List<String> cookieHeaderList = new ArrayList<>(1);
+            cookieHeaderList.add(cookieHeader.toString());
+            reqHeaders.put(CLIENT_COOKIE_HEADER, cookieHeaderList);
         }
     }
 }

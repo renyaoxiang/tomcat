@@ -73,8 +73,9 @@ public class ConnectionPool extends NotificationBroadcasterSupport implements Co
     public static final String NOTIFY_ABANDON = "CONNECTION ABANDONED";
     public static final String SLOW_QUERY_NOTIFICATION = "SLOW QUERY";
     public static final String FAILED_QUERY_NOTIFICATION = "FAILED QUERY";
-    public static final String SUSPECT_ABANDONED_NOTIFICATION = "SUSPECT CONNETION ABANDONED";
+    public static final String SUSPECT_ABANDONED_NOTIFICATION = "SUSPECT CONNECTION ABANDONED";
     public static final String POOL_EMPTY = "POOL EMPTY";
+    public static final String SUSPECT_RETURNED_NOTIFICATION = "SUSPECT CONNECTION RETURNED";
 
     @Override
     public MBeanNotificationInfo[] getNotificationInfo() {
@@ -87,7 +88,8 @@ public class ConnectionPool extends NotificationBroadcasterSupport implements Co
     }
 
     public static MBeanNotificationInfo[] getDefaultNotificationInfo() {
-        String[] types = new String[] {NOTIFY_INIT, NOTIFY_CONNECT, NOTIFY_ABANDON, SLOW_QUERY_NOTIFICATION, FAILED_QUERY_NOTIFICATION, SUSPECT_ABANDONED_NOTIFICATION};
+        String[] types = new String[] {NOTIFY_INIT, NOTIFY_CONNECT, NOTIFY_ABANDON, SLOW_QUERY_NOTIFICATION,
+                FAILED_QUERY_NOTIFICATION, SUSPECT_ABANDONED_NOTIFICATION, POOL_EMPTY, SUSPECT_RETURNED_NOTIFICATION};
         String name = Notification.class.getName();
         String description = "A connection pool error condition was met.";
         MBeanNotificationInfo info = new MBeanNotificationInfo(types, name, description);
@@ -96,8 +98,8 @@ public class ConnectionPool extends NotificationBroadcasterSupport implements Co
 
     /**
      * Return true if the notification was sent successfully, false otherwise.
-     * @param type
-     * @param message
+     * @param type The notification type
+     * @param message The message
      * @return true if the notification succeeded
      */
     public boolean notify(final String type, String message) {
@@ -164,6 +166,41 @@ public class ConnectionPool extends NotificationBroadcasterSupport implements Co
         return pool.getWaitCount();
     }
 
+    @Override
+    public long getBorrowedCount() {
+        return pool.getBorrowedCount();
+    }
+
+    @Override
+    public long getReturnedCount() {
+        return pool.getReturnedCount();
+    }
+
+    @Override
+    public long getCreatedCount() {
+        return pool.getCreatedCount();
+    }
+
+    @Override
+    public long getReleasedCount() {
+        return pool.getReleasedCount();
+    }
+
+    @Override
+    public long getReconnectedCount() {
+        return pool.getReconnectedCount();
+    }
+
+    @Override
+    public long getRemoveAbandonedCount() {
+        return pool.getRemoveAbandonedCount();
+    }
+
+    @Override
+    public long getReleasedIdleCount() {
+        return pool.getReleasedIdleCount();
+    }
+
     //=================================================================
     //       POOL OPERATIONS
     //=================================================================
@@ -181,6 +218,12 @@ public class ConnectionPool extends NotificationBroadcasterSupport implements Co
     public void testIdle() {
         pool.testAllIdle();
     }
+
+    @Override
+    public void resetStats() {
+        pool.resetStats();
+    }
+
     //=================================================================
     //       POOL PROPERTIES
     //=================================================================
@@ -488,7 +531,8 @@ public class ConnectionPool extends NotificationBroadcasterSupport implements Co
 
     @Override
     public void setFairQueue(boolean fairQueue) {
-        getPoolProperties().setFairQueue(fairQueue);
+        // noop - this pool is already running
+        throw new UnsupportedOperationException();
     }
 
 
@@ -530,12 +574,16 @@ public class ConnectionPool extends NotificationBroadcasterSupport implements Co
     @Override
     public void setMaxActive(int maxActive) {
         getPoolProperties().setMaxActive(maxActive);
+        //make sure the pool is properly configured
+        pool.checkPoolConfiguration(getPoolProperties());
     }
 
 
     @Override
     public void setMaxIdle(int maxIdle) {
         getPoolProperties().setMaxIdle(maxIdle);
+        //make sure the pool is properly configured
+        pool.checkPoolConfiguration(getPoolProperties());
 
     }
 
@@ -551,14 +599,17 @@ public class ConnectionPool extends NotificationBroadcasterSupport implements Co
         boolean wasEnabled = getPoolProperties().isPoolSweeperEnabled();
         getPoolProperties().setMinEvictableIdleTimeMillis(minEvictableIdleTimeMillis);
         boolean shouldBeEnabled = getPoolProperties().isPoolSweeperEnabled();
-        //make sure pool cleaner starts when it should
+        //make sure pool cleaner starts/stops when it should
         if (!wasEnabled && shouldBeEnabled) pool.initializePoolCleaner(getPoolProperties());
+        else if (wasEnabled && !shouldBeEnabled) pool.terminatePoolCleaner();
     }
 
 
     @Override
     public void setMinIdle(int minIdle) {
         getPoolProperties().setMinIdle(minIdle);
+        //make sure the pool is properly configured
+        pool.checkPoolConfiguration(getPoolProperties());
     }
 
 
@@ -579,8 +630,9 @@ public class ConnectionPool extends NotificationBroadcasterSupport implements Co
         boolean wasEnabled = getPoolProperties().isPoolSweeperEnabled();
         getPoolProperties().setRemoveAbandoned(removeAbandoned);
         boolean shouldBeEnabled = getPoolProperties().isPoolSweeperEnabled();
-        //make sure pool cleaner starts when it should
+        //make sure pool cleaner starts/stops when it should
         if (!wasEnabled && shouldBeEnabled) pool.initializePoolCleaner(getPoolProperties());
+        else if (wasEnabled && !shouldBeEnabled) pool.terminatePoolCleaner();
     }
 
 
@@ -589,8 +641,9 @@ public class ConnectionPool extends NotificationBroadcasterSupport implements Co
         boolean wasEnabled = getPoolProperties().isPoolSweeperEnabled();
         getPoolProperties().setRemoveAbandonedTimeout(removeAbandonedTimeout);
         boolean shouldBeEnabled = getPoolProperties().isPoolSweeperEnabled();
-        //make sure pool cleaner starts when it should
+        //make sure pool cleaner starts/stops when it should
         if (!wasEnabled && shouldBeEnabled) pool.initializePoolCleaner(getPoolProperties());
+        else if (wasEnabled && !shouldBeEnabled) pool.terminatePoolCleaner();
     }
 
 
@@ -617,8 +670,9 @@ public class ConnectionPool extends NotificationBroadcasterSupport implements Co
         boolean wasEnabled = getPoolProperties().isPoolSweeperEnabled();
         getPoolProperties().setTestWhileIdle(testWhileIdle);
         boolean shouldBeEnabled = getPoolProperties().isPoolSweeperEnabled();
-        //make sure pool cleaner starts when it should
+        //make sure pool cleaner starts/stops when it should
         if (!wasEnabled && shouldBeEnabled) pool.initializePoolCleaner(getPoolProperties());
+        else if (wasEnabled && !shouldBeEnabled) pool.terminatePoolCleaner();
     }
 
 
@@ -627,8 +681,15 @@ public class ConnectionPool extends NotificationBroadcasterSupport implements Co
         boolean wasEnabled = getPoolProperties().isPoolSweeperEnabled();
         getPoolProperties().setTimeBetweenEvictionRunsMillis(timeBetweenEvictionRunsMillis);
         boolean shouldBeEnabled = getPoolProperties().isPoolSweeperEnabled();
-        //make sure pool cleaner starts when it should
-        if (!wasEnabled && shouldBeEnabled) pool.initializePoolCleaner(getPoolProperties());
+        //make sure pool cleaner starts/stops when it should
+        if (!wasEnabled && shouldBeEnabled) {
+            pool.initializePoolCleaner(getPoolProperties());
+        } else if (wasEnabled) {
+            pool.terminatePoolCleaner();
+            if (shouldBeEnabled) {
+                pool.initializePoolCleaner(getPoolProperties());
+            }
+        }
     }
 
 
@@ -850,7 +911,24 @@ public class ConnectionPool extends NotificationBroadcasterSupport implements Co
      */
     @Override
     public void setIgnoreExceptionOnPreLoad(boolean ignoreExceptionOnPreLoad) {
-        getPoolProperties().setIgnoreExceptionOnPreLoad(ignoreExceptionOnPreLoad);
+        // noop - this pool is already running
+        throw new UnsupportedOperationException();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public boolean getUseStatementFacade() {
+        return getPoolProperties().getUseStatementFacade();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void setUseStatementFacade(boolean useStatementFacade) {
+        getPoolProperties().setUseStatementFacade(useStatementFacade);
     }
 
     /**

@@ -17,6 +17,8 @@
 
 package org.apache.coyote.ajp;
 
+import java.nio.ByteBuffer;
+
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
 import org.apache.tomcat.util.buf.ByteChunk;
@@ -112,6 +114,8 @@ public class AjpMessage {
 
     /**
      * Return the underlying byte buffer.
+     *
+     * @return The buffer
      */
     public byte[] getBuffer() {
         return buf;
@@ -119,9 +123,11 @@ public class AjpMessage {
 
 
     /**
-     * Return the current message length. For read, it's the length of the
-     * payload (excluding the header).  For write, it's the length of
-     * the packet as a whole (counting the header).
+     * Return the current message length.
+     *
+     * @return For read, it's the length of the payload (excluding the header).
+     * For write, it's the length of the packet as a whole (counting the
+     * header).
      */
     public int getLen() {
         return len;
@@ -130,6 +136,8 @@ public class AjpMessage {
 
     /**
      * Add a short integer (2 bytes) to the message.
+     *
+     * @param val The integer to append
      */
     public void appendInt(int val) {
         buf[pos++] = (byte) ((val >>> 8) & 0xFF);
@@ -139,6 +147,8 @@ public class AjpMessage {
 
     /**
      * Append a byte (1 byte) to the message.
+     *
+     * @param val The byte value to append
      */
     public void appendByte(int val) {
         buf[pos++] = (byte) val;
@@ -146,8 +156,10 @@ public class AjpMessage {
 
 
     /**
-     * Write a MessageBytes out at the current write position.
-     * A null MessageBytes is encoded as a string with length 0.
+     * Write a MessageBytes out at the current write position. A null
+     * MessageBytes is encoded as a string with length 0.
+     *
+     * @param mb The data to write
      */
     public void appendBytes(MessageBytes mb) {
         if (mb == null) {
@@ -181,8 +193,10 @@ public class AjpMessage {
 
 
     /**
-     * Write a ByteChunk out at the current write position.
-     * A null ByteChunk is encoded as a string with length 0.
+     * Write a ByteChunk out at the current write position. A null ByteChunk is
+     * encoded as a string with length 0.
+     *
+     * @param bc The data to write
      */
     public void appendByteChunk(ByteChunk bc) {
         if (bc == null) {
@@ -208,12 +222,7 @@ public class AjpMessage {
      * @param numBytes The number of bytes to copy.
      */
     public void appendBytes(byte[] b, int off, int numBytes) {
-        if (pos + numBytes + 3 > buf.length) {
-            log.error(sm.getString("ajpmessage.overflow", "" + numBytes, "" + pos),
-                    new ArrayIndexOutOfBoundsException());
-            if (log.isDebugEnabled()) {
-                dump("Overflow/coBytes");
-            }
+        if (checkOverflow(numBytes)) {
             return;
         }
         appendInt(numBytes);
@@ -224,10 +233,46 @@ public class AjpMessage {
 
 
     /**
+     * Copy a chunk of bytes into the packet, starting at the current
+     * write position.  The chunk of bytes is encoded with the length
+     * in two bytes first, then the data itself, and finally a
+     * terminating \0 (which is <B>not</B> included in the encoded
+     * length).
+     *
+     * @param b The ByteBuffer from which to copy bytes.
+     */
+    public void appendBytes(ByteBuffer b) {
+        int numBytes = b.remaining();
+        if (checkOverflow(numBytes)) {
+            return;
+        }
+        appendInt(numBytes);
+        b.get(buf, pos, numBytes);
+        pos += numBytes;
+        appendByte(0);
+    }
+
+
+    private boolean checkOverflow(int numBytes) {
+        if (pos + numBytes + 3 > buf.length) {
+            log.error(sm.getString("ajpmessage.overflow", "" + numBytes, "" + pos),
+                    new ArrayIndexOutOfBoundsException());
+            if (log.isDebugEnabled()) {
+                dump("Overflow/coBytes");
+            }
+            return true;
+        }
+        return false;
+    }
+
+
+    /**
      * Read an integer from packet, and advance the read position past
      * it.  Integers are encoded as two unsigned bytes with the
      * high-order byte first, and, as far as I can tell, in
      * little-endian order within each byte.
+     *
+     * @return The integer value read from the message
      */
     public int getInt() {
         int b1 = buf[pos++] & 0xFF;
@@ -285,6 +330,8 @@ public class AjpMessage {
      * it.  Integers are encoded as four unsigned bytes with the
      * high-order byte first, and, as far as I can tell, in
      * little-endian order within each byte.
+     *
+     * @return The long value read from the message
      */
     public int getLongInt() {
         int b1 = buf[pos++] & 0xFF; // No swap, Java order
@@ -308,7 +355,7 @@ public class AjpMessage {
                 (!toContainer && mark != 0x4142)) {
             log.error(sm.getString("ajpmessage.invalid", "" + mark));
             if (log.isDebugEnabled()) {
-                dump("In: ");
+                dump("In");
             }
             return -1;
         }
@@ -319,12 +366,9 @@ public class AjpMessage {
     }
 
 
-    /**
-     * Dump the contents of the message, prefixed with the given String.
-     */
-    public void dump(String msg) {
+    private void dump(String prefix) {
         if (log.isDebugEnabled()) {
-            log.debug(msg + ": " + HexUtils.toHexString(buf) + " " + pos +"/" + (len + 4));
+            log.debug(prefix + ": " + HexUtils.toHexString(buf) + " " + pos +"/" + (len + 4));
         }
         int max = pos;
         if (len + 4 > pos)

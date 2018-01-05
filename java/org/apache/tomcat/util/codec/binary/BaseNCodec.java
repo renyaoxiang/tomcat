@@ -17,10 +17,6 @@
 package org.apache.tomcat.util.codec.binary;
 
 import org.apache.tomcat.util.buf.HexUtils;
-import org.apache.tomcat.util.codec.BinaryDecoder;
-import org.apache.tomcat.util.codec.BinaryEncoder;
-import org.apache.tomcat.util.codec.DecoderException;
-import org.apache.tomcat.util.codec.EncoderException;
 
 /**
  * Abstract superclass for Base-N encoders and decoders.
@@ -29,7 +25,7 @@ import org.apache.tomcat.util.codec.EncoderException;
  * This class is thread-safe.
  * </p>
  */
-public abstract class BaseNCodec implements BinaryEncoder, BinaryDecoder {
+public abstract class BaseNCodec {
 
     /**
      * Holds thread context so classes can be thread-safe.
@@ -45,12 +41,6 @@ public abstract class BaseNCodec implements BinaryEncoder, BinaryDecoder {
          * Bitwise operations store and extract the encoding or decoding from this variable.
          */
         int ibitWorkArea;
-
-        /**
-         * Place holder for the bytes we're dealing with for our based logic.
-         * Bitwise operations store and extract the encoding or decoding from this variable.
-         */
-        long lbitWorkArea;
 
         /**
          * Buffer for streaming.
@@ -97,10 +87,10 @@ public abstract class BaseNCodec implements BinaryEncoder, BinaryDecoder {
         @Override
         public String toString() {
             return String.format("%s[buffer=%s, currentLinePos=%s, eof=%s, " +
-                    "ibitWorkArea=%s, lbitWorkArea=%s, modulus=%s, pos=%s, " +
+                    "ibitWorkArea=%s, modulus=%s, pos=%s, " +
                     "readPos=%s]", this.getClass().getSimpleName(),
                     HexUtils.toHexString(buffer), currentLinePos, eof,
-                    ibitWorkArea, lbitWorkArea, modulus, pos, readPos);
+                    ibitWorkArea, modulus, pos, readPos);
         }
     }
 
@@ -255,6 +245,7 @@ public abstract class BaseNCodec implements BinaryEncoder, BinaryDecoder {
      *
      * @param size minimum spare space required
      * @param context the context to be used
+     * @return the buffer
      */
     protected byte[] ensureBufferSize(final int size, final Context context){
         if ((context.buffer == null) || (context.buffer.length < context.pos + size)){
@@ -312,24 +303,6 @@ public abstract class BaseNCodec implements BinaryEncoder, BinaryDecoder {
     }
 
     /**
-     * Encodes an Object using the Base-N algorithm. This method is provided in order to satisfy the requirements of
-     * the Encoder interface, and will throw an EncoderException if the supplied object is not of type byte[].
-     *
-     * @param obj
-     *            Object to encode
-     * @return An object (of type byte[]) containing the Base-N encoded data which corresponds to the byte[] supplied.
-     * @throws EncoderException
-     *             if the parameter supplied is not of type byte[]
-     */
-    @Override
-    public Object encode(final Object obj) throws EncoderException {
-        if (!(obj instanceof byte[])) {
-            throw new EncoderException("Parameter supplied to Base-N encode is not a byte[]");
-        }
-        return encode((byte[]) obj);
-    }
-
-    /**
      * Encodes a byte[] containing binary data, into a String containing characters in the Base-N alphabet.
      * Uses UTF8 encoding.
      *
@@ -347,31 +320,11 @@ public abstract class BaseNCodec implements BinaryEncoder, BinaryDecoder {
      *
      * @param pArray a byte array containing binary data
      * @return String containing only character data in the appropriate alphabet.
+     * @since 1.5
+     * This is a duplicate of {@link #encodeToString(byte[])}; it was merged during refactoring.
     */
     public String encodeAsString(final byte[] pArray){
         return StringUtils.newStringUtf8(encode(pArray));
-    }
-
-    /**
-     * Decodes an Object using the Base-N algorithm. This method is provided in order to satisfy the requirements of
-     * the Decoder interface, and will throw a DecoderException if the supplied object is not of type byte[] or String.
-     *
-     * @param obj
-     *            Object to decode
-     * @return An object (of type byte[]) containing the binary data which corresponds to the byte[] or String
-     *         supplied.
-     * @throws DecoderException
-     *             if the parameter supplied is not of type byte[]
-     */
-    @Override
-    public Object decode(final Object obj) throws DecoderException {
-        if (obj instanceof byte[]) {
-            return decode((byte[]) obj);
-        } else if (obj instanceof String) {
-            return decode((String) obj);
-        } else {
-            throw new DecoderException("Parameter supplied to Base-N decode is not a byte[] or a String");
-        }
     }
 
     /**
@@ -392,7 +345,6 @@ public abstract class BaseNCodec implements BinaryEncoder, BinaryDecoder {
      *            A byte array containing Base-N character data
      * @return a byte array containing binary data
      */
-    @Override
     public byte[] decode(final byte[] pArray) {
         return decode(pArray, 0, pArray.length);
     }
@@ -414,16 +366,35 @@ public abstract class BaseNCodec implements BinaryEncoder, BinaryDecoder {
      *
      * @param pArray
      *            a byte array containing binary data
-     * @return A byte array containing only the basen alphabetic character data
+     * @return A byte array containing only the base N alphabetic character data
      */
-    @Override
     public byte[] encode(final byte[] pArray) {
         if (pArray == null || pArray.length == 0) {
             return pArray;
         }
+        return encode(pArray, 0, pArray.length);
+    }
+
+    /**
+     * Encodes a byte[] containing binary data, into a byte[] containing
+     * characters in the alphabet.
+     *
+     * @param pArray
+     *            a byte array containing binary data
+     * @param offset
+     *            initial offset of the subarray.
+     * @param length
+     *            length of the subarray.
+     * @return A byte array containing only the base N alphabetic character data
+     * @since 1.11
+     */
+    public byte[] encode(final byte[] pArray, final int offset, final int length) {
+        if (pArray == null || pArray.length == 0) {
+            return pArray;
+        }
         final Context context = new Context();
-        encode(pArray, 0, pArray.length, context);
-        encode(pArray, 0, EOF, context); // Notify encoder of EOF.
+        encode(pArray, offset, length, context);
+        encode(pArray, offset, EOF, context); // Notify encoder of EOF.
         final byte[] buf = new byte[context.pos - context.readPos];
         readResults(buf, 0, buf.length, context);
         return buf;
@@ -441,7 +412,7 @@ public abstract class BaseNCodec implements BinaryEncoder, BinaryDecoder {
      *
      * @param value The value to test
      *
-     * @return {@code true} if the value is defined in the current alphabet, {@code false} otherwise.
+     * @return <code>true</code> if the value is defined in the current alphabet, <code>false</code> otherwise.
      */
     protected abstract boolean isInAlphabet(byte value);
 
@@ -450,15 +421,15 @@ public abstract class BaseNCodec implements BinaryEncoder, BinaryDecoder {
      * The method optionally treats whitespace and pad as valid.
      *
      * @param arrayOctet byte array to test
-     * @param allowWSPad if {@code true}, then whitespace and PAD are also allowed
+     * @param allowWSPad if <code>true</code>, then whitespace and PAD are also allowed
      *
-     * @return {@code true} if all bytes are valid characters in the alphabet or if the byte array is empty;
-     *         {@code false}, otherwise
+     * @return <code>true</code> if all bytes are valid characters in the alphabet or if the byte array is empty;
+     *         <code>false</code>, otherwise
      */
     public boolean isInAlphabet(final byte[] arrayOctet, final boolean allowWSPad) {
-        for (int i = 0; i < arrayOctet.length; i++) {
-            if (!isInAlphabet(arrayOctet[i]) &&
-                    (!allowWSPad || (arrayOctet[i] != pad) && !isWhiteSpace(arrayOctet[i]))) {
+        for (final byte octet : arrayOctet) {
+            if (!isInAlphabet(octet) &&
+                    (!allowWSPad || (octet != pad) && !isWhiteSpace(octet))) {
                 return false;
             }
         }
@@ -470,8 +441,8 @@ public abstract class BaseNCodec implements BinaryEncoder, BinaryDecoder {
      * The method treats whitespace and PAD as valid.
      *
      * @param basen String to test
-     * @return {@code true} if all characters in the String are valid characters in the alphabet or if
-     *         the String is empty; {@code false}, otherwise
+     * @return <code>true</code> if all characters in the String are valid characters in the alphabet or if
+     *         the String is empty; <code>false</code>, otherwise
      * @see #isInAlphabet(byte[], boolean)
      */
     public boolean isInAlphabet(final String basen) {
@@ -485,7 +456,7 @@ public abstract class BaseNCodec implements BinaryEncoder, BinaryDecoder {
      *
      * @param arrayOctet
      *            byte array to test
-     * @return {@code true} if any byte is a valid character in the alphabet or PAD; {@code false} otherwise
+     * @return <code>true</code> if any byte is a valid character in the alphabet or PAD; <code>false</code> otherwise
      */
     protected boolean containsAlphabetOrPad(final byte[] arrayOctet) {
         if (arrayOctet == null) {

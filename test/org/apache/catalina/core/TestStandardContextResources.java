@@ -31,19 +31,15 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
+import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.catalina.Context;
-import org.apache.catalina.Lifecycle;
-import org.apache.catalina.LifecycleEvent;
-import org.apache.catalina.LifecycleListener;
 import org.apache.catalina.startup.Constants;
 import org.apache.catalina.startup.ContextConfig;
 import org.apache.catalina.startup.Tomcat;
 import org.apache.catalina.startup.TomcatBaseTest;
+import org.apache.catalina.util.IOTools;
 import org.apache.tomcat.util.buf.ByteChunk;
 import org.apache.tomcat.util.descriptor.web.WebXml;
 
@@ -96,7 +92,7 @@ public class TestStandardContextResources extends TomcatBaseTest {
         }
         int index = orderedLibs.indexOf("resources.jar");
         int index2 = orderedLibs.indexOf("resources2.jar");
-        assertTrue(orderedLibs.toString(), index >= 0 && index2 >= 0
+        Assert.assertTrue(orderedLibs.toString(), index >= 0 && index2 >= 0
                 && index < index2);
     }
 
@@ -131,28 +127,16 @@ public class TestStandardContextResources extends TomcatBaseTest {
     @Test
     public void testResourcesAbsoluteOrdering() throws Exception {
         Tomcat tomcat = getTomcatInstance();
-
         File appDir = new File("test/webapp-fragments");
+
+        AbsoluteOrderContextConfig absoluteOrderConfig = new AbsoluteOrderContextConfig();
+
         // app dir is relative to server home
         StandardContext ctx = (StandardContext) tomcat.addWebapp(null, "/test",
-                appDir.getAbsolutePath());
-        LifecycleListener[] listener = ctx.findLifecycleListeners();
-        assertEquals(3,listener.length);
-        assertTrue(listener[1] instanceof ContextConfig);
-        ContextConfig config = new ContextConfig() {
-            @Override
-            protected WebXml createWebXml() {
-                WebXml wxml = new WebXml();
-                wxml.addAbsoluteOrdering("resources");
-                wxml.addAbsoluteOrdering("resources2");
-                return wxml;
-            }
-        };
-        // prevent it from looking ( if it finds one - it'll have dup error )
-        config.setDefaultWebXml(Constants.NoDefaultWebXml);
-        listener[1] = config;
+                appDir.getAbsolutePath(), absoluteOrderConfig);
+
         Tomcat.addServlet(ctx, "getresource", new GetResourceServlet());
-        ctx.addServletMapping("/getresource", "getresource");
+        ctx.addServletMappingDecoded("/getresource", "getresource");
 
         tomcat.start();
         assertPageContains("/test/getresource?path=/resourceF.jsp",
@@ -161,32 +145,21 @@ public class TestStandardContextResources extends TomcatBaseTest {
         "<p>resourceB.jsp in resources.jar</p>");
 
         // Check ordering, for BZ 54391
-        assertEquals(Arrays.asList("resources.jar", "resources2.jar"), ctx
+        Assert.assertEquals(Arrays.asList("resources.jar", "resources2.jar"), ctx
                 .getServletContext().getAttribute(ServletContext.ORDERED_LIBS));
 
-        ctx.stop();
+        tomcat.getHost().removeChild(ctx);
+        tomcat.getHost().stop();
 
-        LifecycleListener[] listener1 = ctx.findLifecycleListeners();
-        // change ordering and reload
-        ContextConfig config1 = new ContextConfig() {
-            @Override
-            protected WebXml createWebXml() {
-                WebXml wxml = new WebXml();
-                wxml.addAbsoluteOrdering("resources2");
-                wxml.addAbsoluteOrdering("resources");
-                return wxml;
-            }
-        };
-        // prevent it from looking ( if it finds one - it'll have dup error )
-        config1.setDefaultWebXml(Constants.NoDefaultWebXml);
-        listener1[1] = config1;
-        // Need to init since context won't call init
-        config1.lifecycleEvent(
-                new LifecycleEvent(ctx, Lifecycle.AFTER_INIT_EVENT, null));
+        // change ordering
+        absoluteOrderConfig.swap();
+
+        ctx = (StandardContext) tomcat.addWebapp(null, "/test",
+                appDir.getAbsolutePath(), absoluteOrderConfig);
         Tomcat.addServlet(ctx, "getresource", new GetResourceServlet());
-        ctx.addServletMapping("/getresource", "getresource");
+        ctx.addServletMappingDecoded("/getresource", "getresource");
 
-        ctx.start();
+        tomcat.getHost().start();
 
         assertPageContains("/test/getresource?path=/resourceF.jsp",
         "<p>resourceF.jsp in resources2.jar</p>");
@@ -194,9 +167,39 @@ public class TestStandardContextResources extends TomcatBaseTest {
         "<p>resourceB.jsp in resources2.jar</p>");
 
         // Check ordering, for BZ 54391
-        assertEquals(Arrays.asList("resources2.jar", "resources.jar"), ctx
+        Assert.assertEquals(Arrays.asList("resources2.jar", "resources.jar"), ctx
                 .getServletContext().getAttribute(ServletContext.ORDERED_LIBS));
     }
+
+
+    public static class AbsoluteOrderContextConfig extends ContextConfig {
+
+        private boolean swap = false;
+
+        public AbsoluteOrderContextConfig() {
+            super();
+            // Prevent it from looking (if it finds one - it'll have dup error)
+            setDefaultWebXml(Constants.NoDefaultWebXml);
+        }
+
+        @Override
+        protected WebXml createWebXml() {
+            WebXml wxml = new WebXml();
+            if (swap) {
+                wxml.addAbsoluteOrdering("resources2");
+                wxml.addAbsoluteOrdering("resources");
+            } else {
+                wxml.addAbsoluteOrdering("resources");
+                wxml.addAbsoluteOrdering("resources2");
+            }
+            return wxml;
+        }
+
+        protected void swap() {
+            swap = !swap;
+        }
+    }
+
 
     @Test
     public void testResources2() throws Exception {
@@ -206,9 +209,10 @@ public class TestStandardContextResources extends TomcatBaseTest {
         // app dir is relative to server home
         StandardContext ctx = (StandardContext) tomcat.addWebapp(null, "/test",
                 appDir.getAbsolutePath());
+        skipTldsForResourceJars(ctx);
 
         Tomcat.addServlet(ctx, "getresource", new GetResourceServlet());
-        ctx.addServletMapping("/getresource", "getresource");
+        ctx.addServletMappingDecoded("/getresource", "getresource");
 
         tomcat.start();
 
@@ -251,10 +255,7 @@ public class TestStandardContextResources extends TomcatBaseTest {
 
             try (InputStream input = url.openStream();
                     OutputStream output = resp.getOutputStream()) {
-                byte[] buffer = new byte[4000];
-                for (int len; (len = input.read(buffer)) > 0;) {
-                    output.write(buffer, 0, len);
-                }
+                IOTools.flow(input, output);
             }
         }
     }
@@ -270,11 +271,11 @@ public class TestStandardContextResources extends TomcatBaseTest {
         ByteChunk res = new ByteChunk();
         int sc = getUrl("http://localhost:" + getPort() + pageUrl, res, null);
 
-        assertEquals(expectedStatus, sc);
+        Assert.assertEquals(expectedStatus, sc);
 
         if (expectedStatus == 200) {
             String result = res.toString();
-            assertTrue(result, result.indexOf(expectedBody) > 0);
+            Assert.assertTrue(result, result.indexOf(expectedBody) > 0);
         }
     }
 }

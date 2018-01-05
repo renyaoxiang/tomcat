@@ -20,7 +20,7 @@ package org.apache.tomcat.util.bcel.classfile;
 import java.io.DataInput;
 import java.io.IOException;
 
-import org.apache.tomcat.util.bcel.Constants;
+import org.apache.tomcat.util.bcel.Const;
 
 /**
  * Abstract superclass for classes to represent the different constant types
@@ -42,7 +42,7 @@ public abstract class Constant {
     protected final byte tag;
 
 
-    Constant(byte tag) {
+    Constant(final byte tag) {
         this.tag = tag;
     }
 
@@ -57,49 +57,50 @@ public abstract class Constant {
 
 
     /**
-     * Read one constant from the given file, the type depends on a tag byte.
+     * Read one constant from the given input, the type depends on a tag byte.
      *
-     * @param file Input stream
+     * @param input Input stream
      * @return Constant object
      */
-    static Constant readConstant(DataInput file ) throws IOException,
+    static Constant readConstant(final DataInput input) throws IOException,
             ClassFormatException {
-        byte b = file.readByte(); // Read tag byte
+        final byte b = input.readByte(); // Read tag byte
         int skipSize;
         switch (b) {
-            case Constants.CONSTANT_Class:
-                return new ConstantClass(file);
-            case Constants.CONSTANT_Integer:
-                return new ConstantInteger(file);
-            case Constants.CONSTANT_Float:
-                return new ConstantFloat(file);
-            case Constants.CONSTANT_Long:
-                return new ConstantLong(file);
-            case Constants.CONSTANT_Double:
-                return new ConstantDouble(file);
-            case Constants.CONSTANT_Utf8:
-                return ConstantUtf8.getInstance(file);
-            case Constants.CONSTANT_String:
-            case Constants.CONSTANT_MethodType:
+            case Const.CONSTANT_Class:
+                return new ConstantClass(input);
+            case Const.CONSTANT_Integer:
+                return new ConstantInteger(input);
+            case Const.CONSTANT_Float:
+                return new ConstantFloat(input);
+            case Const.CONSTANT_Long:
+                return new ConstantLong(input);
+            case Const.CONSTANT_Double:
+                return new ConstantDouble(input);
+            case Const.CONSTANT_Utf8:
+                return ConstantUtf8.getInstance(input);
+            case Const.CONSTANT_String:
+            case Const.CONSTANT_MethodType:
+            case Const.CONSTANT_Module:
+            case Const.CONSTANT_Package:
                 skipSize = 2; // unsigned short
                 break;
-            case Constants.CONSTANT_MethodHandle:
+            case Const.CONSTANT_MethodHandle:
                 skipSize = 3; // unsigned byte, unsigned short
                 break;
-            case Constants.CONSTANT_Fieldref:
-            case Constants.CONSTANT_Methodref:
-            case Constants.CONSTANT_InterfaceMethodref:
-            case Constants.CONSTANT_NameAndType:
-            case Constants.CONSTANT_InvokeDynamic:
+            case Const.CONSTANT_Fieldref:
+            case Const.CONSTANT_Methodref:
+            case Const.CONSTANT_InterfaceMethodref:
+            case Const.CONSTANT_NameAndType:
+            case Const.CONSTANT_InvokeDynamic:
                 skipSize = 4; // unsigned short, unsigned short
                 break;
             default:
                 throw new ClassFormatException("Invalid byte tag in constant pool: " + b);
         }
-        Utility.skipFully(file, skipSize);
+        Utility.skipFully(input, skipSize);
         return null;
     }
-
 
 
     @Override

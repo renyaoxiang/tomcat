@@ -69,7 +69,7 @@ public abstract class FactoryBase implements ObjectFactory {
                     throw ex;
                 }
                 try {
-                    factory = (ObjectFactory) factoryClass.newInstance();
+                    factory = (ObjectFactory) factoryClass.getConstructor().newInstance();
                 } catch(Throwable t) {
                     if (t instanceof NamingException) {
                         throw (NamingException) t;
@@ -121,7 +121,7 @@ public abstract class FactoryBase implements ObjectFactory {
      * @return  The default factory for the given reference object or
      *          <code>null</code> if no default factory exists.
      *
-     * @throws NamingException  If the default factory cannot be craeted
+     * @throws NamingException  If the default factory cannot be created
      */
     protected abstract ObjectFactory getDefaultFactory(Reference ref)
             throws NamingException;
@@ -133,6 +133,7 @@ public abstract class FactoryBase implements ObjectFactory {
      *
      * @return  The linked object or <code>null</code> if linked objects are
      *          not supported by or not configured for this reference object
+     * @throws NamingException Error accessing linked object
      */
     protected abstract Object getLinked(Reference ref) throws NamingException;
 }

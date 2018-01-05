@@ -17,6 +17,7 @@
 package org.apache.catalina.ssi;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashSet;
@@ -25,9 +26,9 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.TimeZone;
 
-import org.apache.catalina.util.RequestUtil;
 import org.apache.catalina.util.Strftime;
 import org.apache.catalina.util.URLEncoder;
+import org.apache.tomcat.util.security.Escape;
 
 /**
  * Allows the different SSICommand implementations to share data/talk to each
@@ -43,7 +44,6 @@ public class SSIMediator {
     protected static final String DEFAULT_CONFIG_ERR_MSG = "[an error occurred while processing this directive]";
     protected static final String DEFAULT_CONFIG_TIME_FMT = "%A, %d-%b-%Y %T %Z";
     protected static final String DEFAULT_CONFIG_SIZE_FMT = "abbrev";
-    protected static final URLEncoder urlEncoder;
     protected String configErrMsg = DEFAULT_CONFIG_ERR_MSG;
     protected String configTimeFmt = DEFAULT_CONFIG_TIME_FMT;
     protected String configSizeFmt = DEFAULT_CONFIG_SIZE_FMT;
@@ -52,22 +52,6 @@ public class SSIMediator {
     protected final long lastModifiedDate;
     protected Strftime strftime;
     protected final SSIConditionalState conditionalState = new SSIConditionalState();
-    static {
-        //We try to encode only the same characters that apache does
-        urlEncoder = new URLEncoder();
-        urlEncoder.addSafeCharacter(',');
-        urlEncoder.addSafeCharacter(':');
-        urlEncoder.addSafeCharacter('-');
-        urlEncoder.addSafeCharacter('_');
-        urlEncoder.addSafeCharacter('.');
-        urlEncoder.addSafeCharacter('*');
-        urlEncoder.addSafeCharacter('/');
-        urlEncoder.addSafeCharacter('!');
-        urlEncoder.addSafeCharacter('~');
-        urlEncoder.addSafeCharacter('\'');
-        urlEncoder.addSafeCharacter('(');
-        urlEncoder.addSafeCharacter(')');
-    }
 
 
     public SSIMediator(SSIExternalResolver ssiExternalResolver,
@@ -201,6 +185,8 @@ public class SSIMediator {
     /**
      * Applies variable substitution to the specified String and returns the
      * new resolved string.
+     * @param val The value which should be checked
+     * @return the value after variable substitution
      */
     public String substituteVariables(String val) {
         // If it has no references or HTML entities then no work
@@ -294,11 +280,11 @@ public class SSIMediator {
     protected String encode(String value, String encoding) {
         String retVal = null;
         if (encoding.equalsIgnoreCase("url")) {
-            retVal = urlEncoder.encode(value);
+            retVal = URLEncoder.DEFAULT.encode(value, StandardCharsets.UTF_8);
         } else if (encoding.equalsIgnoreCase("none")) {
             retVal = value;
         } else if (encoding.equalsIgnoreCase("entity")) {
-            retVal = RequestUtil.filter(value);
+            retVal = Escape.htmlElementContent(value);
         } else {
             //This shouldn't be possible
             throw new IllegalArgumentException("Unknown encoding: " + encoding);

@@ -63,19 +63,23 @@ public class ThreadPoolExecutor extends java.util.concurrent.ThreadPoolExecutor 
 
     public ThreadPoolExecutor(int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit, BlockingQueue<Runnable> workQueue, RejectedExecutionHandler handler) {
         super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, handler);
+        prestartAllCoreThreads();
     }
 
     public ThreadPoolExecutor(int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit, BlockingQueue<Runnable> workQueue, ThreadFactory threadFactory,
             RejectedExecutionHandler handler) {
         super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, threadFactory, handler);
+        prestartAllCoreThreads();
     }
 
     public ThreadPoolExecutor(int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit, BlockingQueue<Runnable> workQueue, ThreadFactory threadFactory) {
         super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, threadFactory, new RejectHandler());
+        prestartAllCoreThreads();
     }
 
     public ThreadPoolExecutor(int corePoolSize, int maximumPoolSize, long keepAliveTime, TimeUnit unit, BlockingQueue<Runnable> workQueue) {
         super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, new RejectHandler());
+        prestartAllCoreThreads();
     }
 
     public long getThreadRenewalDelay() {
@@ -151,6 +155,8 @@ public class ThreadPoolExecutor extends java.util.concurrent.ThreadPoolExecutor 
      * full after that.
      *
      * @param command the runnable task
+     * @param timeout A timeout for the completion of the task
+     * @param unit The timeout time unit
      * @throws RejectedExecutionException if this task cannot be
      * accepted for execution - the queue is full
      * @throws NullPointerException if command or unit is null

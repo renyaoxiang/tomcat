@@ -129,6 +129,7 @@ public class ReflectionUtil {
     public static Method getMethod(EvaluationContext ctx, Object base, Object property,
             Class<?>[] paramTypes, Object[] paramValues)
             throws MethodNotFoundException {
+
         if (base == null || property == null) {
             throw new MethodNotFoundException(MessageFactory.get(
                     "error.method.notfound", base, property,
@@ -163,9 +164,27 @@ public class ReflectionUtil {
             }
 
             // Check the number of parameters
-            if (!(paramCount == mParamCount ||
-                    (m.isVarArgs() && paramCount >= mParamCount))) {
+            // Multiple tests to improve readability
+            if (!m.isVarArgs() && paramCount != mParamCount) {
                 // Method has wrong number of parameters
+                continue;
+            }
+            if (m.isVarArgs() && paramCount < mParamCount -1) {
+                // Method has wrong number of parameters
+                continue;
+            }
+            if (m.isVarArgs() && paramCount == mParamCount && paramValues != null &&
+                    paramValues.length > paramCount && !paramTypes[mParamCount -1].isArray()) {
+                // Method arguments don't match
+                continue;
+            }
+            if (m.isVarArgs() && paramCount > mParamCount && paramValues != null &&
+                    paramValues.length != paramCount) {
+                // Might match a different varargs method
+                continue;
+            }
+            if (!m.isVarArgs() && paramValues != null && paramCount != paramValues.length) {
+                // Might match a different varargs method
                 continue;
             }
 
@@ -176,9 +195,12 @@ public class ReflectionUtil {
             boolean noMatch = false;
             for (int i = 0; i < mParamCount; i++) {
                 // Can't be null
-                if (mParamTypes[i].equals(paramTypes[i])) {
-                    exactMatch++;
-                } else if (i == (mParamCount - 1) && m.isVarArgs()) {
+                if (m.isVarArgs() && i == (mParamCount - 1)) {
+                    if (i == paramCount || (paramValues != null && paramValues.length == i)) {
+                        // Nothing is passed as varargs
+                        assignableMatch++;
+                        break;
+                    }
                     Class<?> varType = mParamTypes[i].getComponentType();
                     for (int j = i; j < paramCount; j++) {
                         if (isAssignableFrom(paramTypes[j], varType)) {
@@ -200,18 +222,22 @@ public class ReflectionUtil {
                         // lead to a varArgs method matching when the result
                         // should be ambiguous
                     }
-                } else if (isAssignableFrom(paramTypes[i], mParamTypes[i])) {
-                    assignableMatch++;
                 } else {
-                    if (paramValues == null) {
-                        noMatch = true;
-                        break;
+                    if (mParamTypes[i].equals(paramTypes[i])) {
+                        exactMatch++;
+                    } else if (paramTypes[i] != null && isAssignableFrom(paramTypes[i], mParamTypes[i])) {
+                        assignableMatch++;
                     } else {
-                        if (isCoercibleFrom(ctx, paramValues[i], mParamTypes[i])) {
-                            coercibleMatch++;
-                        } else {
+                        if (paramValues == null) {
                             noMatch = true;
                             break;
+                        } else {
+                            if (isCoercibleFrom(ctx, paramValues[i], mParamTypes[i])) {
+                                coercibleMatch++;
+                            } else {
+                                noMatch = true;
+                                break;
+                            }
                         }
                     }
                 }
@@ -502,6 +528,29 @@ public class ReflectionUtil {
             }
             return cmp;
         }
-    }
 
+        @Override
+        public boolean equals(Object o)
+        {
+            return o == this
+                    || (null != o
+                    && this.getClass().equals(o.getClass())
+                    && ((MatchResult)o).getExact() == this.getExact()
+                    && ((MatchResult)o).getAssignable() == this.getAssignable()
+                    && ((MatchResult)o).getCoercible() == this.getCoercible()
+                    && ((MatchResult)o).isBridge() == this.isBridge()
+                    )
+                    ;
+        }
+
+        @Override
+        public int hashCode()
+        {
+            return (this.isBridge() ? 1 << 24 : 0)
+                    ^ this.getExact() << 16
+                    ^ this.getAssignable() << 8
+                    ^ this.getCoercible()
+                    ;
+        }
+    }
 }

@@ -43,6 +43,7 @@
 !include "StrFunc.nsh"
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
+!include "TextFunc.nsh"
 ${StrRep}
 
 Var JavaHome
@@ -56,6 +57,7 @@ Var TomcatPortAjp
 Var TomcatMenuEntriesEnable
 Var TomcatShortcutAllUsers
 Var TomcatServiceName
+Var TomcatServiceNameAlreadyInstalled
 Var TomcatServiceDefaultName
 Var TomcatServiceFileName
 Var TomcatServiceManagerFileName
@@ -96,27 +98,6 @@ Var ServiceInstallLog
   !define MUI_ICON tomcat.ico
   !define MUI_UNICON tomcat.ico
 
-  ;Install Options pages
-  LangString TEXT_JVM_TITLE ${LANG_ENGLISH} "Java Virtual Machine"
-  LangString TEXT_JVM_SUBTITLE ${LANG_ENGLISH} "Java Virtual Machine path selection."
-  LangString TEXT_JVM_PAGETITLE ${LANG_ENGLISH} ": Java Virtual Machine path selection"
-
-  LangString TEXT_INSTDIR_NOT_EMPTY ${LANG_ENGLISH} "The specified installation directory is not empty. Do you wish to continue?"
-  LangString TEXT_CONF_TITLE ${LANG_ENGLISH} "Configuration"
-  LangString TEXT_CONF_SUBTITLE ${LANG_ENGLISH} "Tomcat basic configuration."
-  LangString TEXT_CONF_PAGETITLE ${LANG_ENGLISH} ": Configuration Options"
-
-  LangString TEXT_JVM_LABEL1 ${LANG_ENGLISH} "Please select the path of a Java SE 7.0 or later JRE installed on your system."
-  LangString TEXT_CONF_LABEL_PORT_SHUTDOWN ${LANG_ENGLISH} "Server Shutdown Port"
-  LangString TEXT_CONF_LABEL_PORT_HTTP ${LANG_ENGLISH} "HTTP/1.1 Connector Port"
-  LangString TEXT_CONF_LABEL_PORT_AJP ${LANG_ENGLISH} "AJP/1.3 Connector Port"
-  LangString TEXT_CONF_LABEL_SERVICE_NAME ${LANG_ENGLISH} "Windows Service Name"
-  LangString TEXT_CONF_LABEL_SHORTCUT_ALL_USERS ${LANG_ENGLISH} "Create shortcuts for all users"
-  LangString TEXT_CONF_LABEL_ADMIN ${LANG_ENGLISH} "Tomcat Administrator Login (optional)"
-  LangString TEXT_CONF_LABEL_ADMINUSERNAME ${LANG_ENGLISH} "User Name"
-  LangString TEXT_CONF_LABEL_ADMINPASSWORD ${LANG_ENGLISH} "Password"
-  LangString TEXT_CONF_LABEL_ADMINROLES ${LANG_ENGLISH} "Roles"
-
   ;Install Page order
   !insertmacro MUI_PAGE_WELCOME
   ; Show file named "INSTALLLICENSE"
@@ -138,28 +119,48 @@ Var ServiceInstallLog
     !insertmacro MUI_UNPAGE_INSTFILES
   !endif
 
-  ;Component-selection page
-    ;Descriptions
-    LangString DESC_SecTomcat ${LANG_ENGLISH} "Install the Tomcat Servlet container as a Windows service."
-    LangString DESC_SecTomcatCore ${LANG_ENGLISH} "Install the Tomcat Servlet container core and create the Windows service."
-    LangString DESC_SecTomcatService ${LANG_ENGLISH} "Automatically start the Tomcat service when the computer is started."
-    LangString DESC_SecTomcatNative ${LANG_ENGLISH} "Install APR based Tomcat native .dll for better performance and scalability in production environments."
-    LangString DESC_SecMenu ${LANG_ENGLISH} "Create a Start Menu program group for Tomcat."
-    LangString DESC_SecDocs ${LANG_ENGLISH} "Install the Tomcat documentation bundle. This includes documentation on the servlet container and its configuration options, on the Jasper JSP page compiler, as well as on the native webserver connectors."
-    LangString DESC_SecManager ${LANG_ENGLISH} "Install the Tomcat Manager administrative web application."
-    LangString DESC_SecHostManager ${LANG_ENGLISH} "Install the Tomcat Host Manager administrative web application."
-    LangString DESC_SecExamples ${LANG_ENGLISH} "Install the Servlet and JSP examples web application."
-
   ;Language
   !insertmacro MUI_LANGUAGE English
+
+  ;Install Options pages
+  LangString TEXT_JVM_TITLE ${LANG_ENGLISH} "Java Virtual Machine"
+  LangString TEXT_JVM_SUBTITLE ${LANG_ENGLISH} "Java Virtual Machine path selection."
+  LangString TEXT_JVM_PAGETITLE ${LANG_ENGLISH} ": Java Virtual Machine path selection"
+
+  LangString TEXT_INSTDIR_NOT_EMPTY ${LANG_ENGLISH} "The specified installation directory is not empty. Do you wish to continue?"
+  LangString TEXT_CONF_TITLE ${LANG_ENGLISH} "Configuration"
+  LangString TEXT_CONF_SUBTITLE ${LANG_ENGLISH} "Tomcat basic configuration."
+  LangString TEXT_CONF_PAGETITLE ${LANG_ENGLISH} ": Configuration Options"
+
+  LangString TEXT_JVM_LABEL1 ${LANG_ENGLISH} "Please select the path of a Java SE 8.0 or later JRE installed on your system."
+  LangString TEXT_CONF_LABEL_PORT_SHUTDOWN ${LANG_ENGLISH} "Server Shutdown Port"
+  LangString TEXT_CONF_LABEL_PORT_HTTP ${LANG_ENGLISH} "HTTP/1.1 Connector Port"
+  LangString TEXT_CONF_LABEL_PORT_AJP ${LANG_ENGLISH} "AJP/1.3 Connector Port"
+  LangString TEXT_CONF_LABEL_SERVICE_NAME ${LANG_ENGLISH} "Windows Service Name"
+  LangString TEXT_CONF_LABEL_SHORTCUT_ALL_USERS ${LANG_ENGLISH} "Create shortcuts for all users"
+  LangString TEXT_CONF_LABEL_ADMIN ${LANG_ENGLISH} "Tomcat Administrator Login (optional)"
+  LangString TEXT_CONF_LABEL_ADMINUSERNAME ${LANG_ENGLISH} "User Name"
+  LangString TEXT_CONF_LABEL_ADMINPASSWORD ${LANG_ENGLISH} "Password"
+  LangString TEXT_CONF_LABEL_ADMINROLES ${LANG_ENGLISH} "Roles"
+
+  ;Component-selection page
+  LangString DESC_SecTomcat ${LANG_ENGLISH} "Install the Tomcat Servlet container as a Windows service."
+  LangString DESC_SecTomcatCore ${LANG_ENGLISH} "Install the Tomcat Servlet container core and create the Windows service."
+  LangString DESC_SecTomcatService ${LANG_ENGLISH} "Automatically start the Tomcat service when the computer is started."
+  LangString DESC_SecTomcatNative ${LANG_ENGLISH} "Install APR based Tomcat native .dll for better performance and scalability in production environments."
+  LangString DESC_SecMenu ${LANG_ENGLISH} "Create a Start Menu program group for Tomcat."
+  LangString DESC_SecDocs ${LANG_ENGLISH} "Install the Tomcat documentation bundle. This includes documentation on the servlet container and its configuration options, on the Jasper JSP page compiler, as well as on the native webserver connectors."
+  LangString DESC_SecManager ${LANG_ENGLISH} "Install the Tomcat Manager administrative web application."
+  LangString DESC_SecHostManager ${LANG_ENGLISH} "Install the Tomcat Host Manager administrative web application."
+  LangString DESC_SecExamples ${LANG_ENGLISH} "Install the Servlet and JSP examples web application."
 
   ;Install types
   InstType Normal
   InstType Minimum
   InstType Full
 
-  ReserveFile "${NSISDIR}\Plugins\System.dll"
-  ReserveFile "${NSISDIR}\Plugins\nsDialogs.dll"
+  ReserveFile System.dll
+  ReserveFile nsDialogs.dll
   ReserveFile confinstall\tomcat-users_1.xml
   ReserveFile confinstall\tomcat-users_2.xml
 
@@ -180,6 +181,7 @@ Section "Core" SecTomcatCore
   File tomcat.ico
   File LICENSE
   File NOTICE
+  File RELEASE-NOTES
   SetOutPath $INSTDIR\lib
   File /r lib\*.*
   ; Note: just calling 'SetOutPath' will create the empty folders for us
@@ -211,8 +213,6 @@ Section "Core" SecTomcatCore
     File /oname=$TomcatServiceFileName bin\tomcat@VERSION_MAJOR@.exe
   ${ElseIf} $Arch == "x64"
     File /oname=$TomcatServiceFileName bin\x64\tomcat@VERSION_MAJOR@.exe
-  ${ElseIf} $Arch == "i64"
-    File /oname=$TomcatServiceFileName bin\i64\tomcat@VERSION_MAJOR@.exe
   ${EndIf}
 
   FileOpen $ServiceInstallLog "$INSTDIR\logs\service-install.log" a
@@ -264,8 +264,6 @@ Section "Native" SecTomcatNative
     File bin\tcnative-1.dll
   ${ElseIf} $Arch == "x64"
     File /oname=tcnative-1.dll bin\x64\tcnative-1.dll
-  ${ElseIf} $Arch == "i64"
-    File /oname=tcnative-1.dll bin\i64\tcnative-1.dll
   ${EndIf}
 
   ClearErrors
@@ -324,6 +322,8 @@ Section -post
     FileWrite $ServiceInstallLog "$\r$\n"
     FileWrite $ServiceInstallLog '"$INSTDIR\bin\$TomcatServiceFileName" //US//$TomcatServiceName --JvmOptions "-Dcatalina.home=$INSTDIR#-Dcatalina.base=$INSTDIR#-Djava.io.tmpdir=$INSTDIR\temp#-Djava.util.logging.manager=org.apache.juli.ClassLoaderLogManager#-Djava.util.logging.config.file=$INSTDIR\conf\logging.properties"'
     FileWrite $ServiceInstallLog "$\r$\n"
+    FileWrite $ServiceInstallLog '"$INSTDIR\bin\$TomcatServiceFileName" //US//$TomcatServiceName --JvmOptions9 "--add-opens=java.base/java.lang=ALL-UNNAMED#--add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED"'
+    FileWrite $ServiceInstallLog "$\r$\n"
     FileWrite $ServiceInstallLog '"$INSTDIR\bin\$TomcatServiceFileName" //US//$TomcatServiceName --StdOutput auto --StdError auto --JvmMs 128 --JvmMx 256'
     FileWrite $ServiceInstallLog "$\r$\n"
     FileClose $ServiceInstallLog
@@ -332,6 +332,7 @@ Section -post
   DetailPrint "Configuring $TomcatServiceName service"
   nsExec::ExecToLog '"$INSTDIR\bin\$TomcatServiceFileName" //US//$TomcatServiceName --Classpath "$INSTDIR\bin\bootstrap.jar;$INSTDIR\bin\tomcat-juli.jar" --StartClass org.apache.catalina.startup.Bootstrap --StopClass org.apache.catalina.startup.Bootstrap --StartParams start --StopParams stop  --StartMode jvm --StopMode jvm'
   nsExec::ExecToLog '"$INSTDIR\bin\$TomcatServiceFileName" //US//$TomcatServiceName --JvmOptions "-Dcatalina.home=$INSTDIR#-Dcatalina.base=$INSTDIR#-Djava.io.tmpdir=$INSTDIR\temp#-Djava.util.logging.manager=org.apache.juli.ClassLoaderLogManager#-Djava.util.logging.config.file=$INSTDIR\conf\logging.properties"'
+  nsExec::ExecToLog '"$INSTDIR\bin\$TomcatServiceFileName" //US//$TomcatServiceName --JvmOptions9 "--add-opens=java.base/java.lang=ALL-UNNAMED#--add-opens=java.rmi/sun.rmi.transport=ALL-UNNAMED"'
   nsExec::ExecToLog '"$INSTDIR\bin\$TomcatServiceFileName" //US//$TomcatServiceName --StdOutput auto --StdError auto --JvmMs 128 --JvmMx 256'
 
   ${If} $TomcatShortcutAllUsers == "1"
@@ -359,9 +360,31 @@ Section -post
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Apache Tomcat @VERSION_MAJOR_MINOR@ $TomcatServiceName" \
                    "DisplayIcon" "$\"$INSTDIR\tomcat.ico$\""
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Apache Tomcat @VERSION_MAJOR_MINOR@ $TomcatServiceName" \
+                   "Publisher" "The Apache Software Foundation"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Apache Tomcat @VERSION_MAJOR_MINOR@ $TomcatServiceName" \
                    "UninstallString" "$\"$INSTDIR\Uninstall.exe$\" -ServiceName=$\"$TomcatServiceName$\""
 
 SectionEnd
+
+!define ReadFromConfigIni "!insertmacro ReadFromConfigIni"
+!macro ReadFromConfigIni Return_Variable Key_Name Config_File
+  Push "${Config_File}"
+  Push "${Return_Variable}"
+  Push "${Key_Name}"
+  Call ReadFromConfigIni
+  IfErrors +2
+   StrCpy ${Return_Variable} $1
+!macroend
+
+Function ReadFromConfigIni
+  ClearErrors
+                             ; Stack: <Key_Name> <Return_Variable> <Config_File>
+  Pop $0                     ; <Key_Name> Stack: <Return_Variable> <Config_File>
+  Pop $1                     ; <Return_Variable> Stack: <Config_File>
+  Pop $2                     ; <Config_File> Stack: -empty-
+
+  ${ConfigRead} $2 '$0=' $1        ; <Config_File> <Key_Name> <Return_Variable>
+FunctionEnd
 
 Function .onInit
   !ifdef UNINSTALLONLY
@@ -379,6 +402,7 @@ Function .onInit
   ${IfNot} ${Errors}
     MessageBox MB_OK|MB_ICONINFORMATION 'Available options:$\r$\n\
                /S - Silent install.$\r$\n\
+               /C=config.ini - specify full path of config file to override default values.$\r$\n\
                /D=INSTDIR - Specify installation directory.'
     Abort
   ${EndIf}
@@ -401,6 +425,27 @@ Function .onInit
   StrCpy $TomcatAdminUsername ""
   StrCpy $TomcatAdminPassword ""
   StrCpy $TomcatAdminRoles ""
+
+  ;override default values in case config file was passed in
+  ${GetOptions} "$R0" "/C=" $R2
+  ${IfNot} ${Errors}
+     ${ReadFromConfigIni} $JavaHome "JavaHome" $R2
+     ${ReadFromConfigIni} $TomcatPortShutdown "TomcatPortShutdown" $R2
+     ${ReadFromConfigIni} $TomcatPortHttp "TomcatPortHttp" $R2
+     ${ReadFromConfigIni} $TomcatPortAjp "TomcatPortAjp" $R2
+     ${ReadFromConfigIni} $TomcatMenuEntriesEnable "TomcatMenuEntriesEnable" $R2
+     ${ReadFromConfigIni} $TomcatShortcutAllUsers "TomcatShortcutAllUsers" $R2
+     ${ReadFromConfigIni} $TomcatServiceDefaultName "TomcatServiceDefaultName" $R2
+     ${ReadFromConfigIni} $TomcatServiceName "TomcatServiceName" $R2
+     ${ReadFromConfigIni} $TomcatServiceFileName "TomcatServiceFileName" $R2
+     ${ReadFromConfigIni} $TomcatServiceManagerFileName "TomcatServiceManagerFileName" $R2
+     ${ReadFromConfigIni} $TomcatAdminEnable "TomcatAdminEnable" $R2
+     ${ReadFromConfigIni} $TomcatAdminUsername "TomcatAdminUsername" $R2
+     ${ReadFromConfigIni} $TomcatAdminPassword "TomcatAdminPassword" $R2
+     ${ReadFromConfigIni} $TomcatAdminRoles "TomcatAdminRoles" $R2
+  ${EndIf}
+  ClearErrors
+
 FunctionEnd
 
 Function pageChooseJVM
@@ -588,6 +633,15 @@ Function pageConfigurationLeave
 
   ${If} $TomcatServiceName == ""
     MessageBox MB_ICONEXCLAMATION|MB_OK 'The Service Name may not be empty'
+    Abort "Config not right"
+    Goto exit
+  ${EndIf}
+
+  ReadRegStr $TomcatServiceNameAlreadyInstalled HKLM "SYSTEM\CurrentControlSet\Services\$TomcatServiceName" \
+    "DisplayName"
+  ${If} $TomcatServiceNameAlreadyInstalled != ""
+    MessageBox MB_ICONEXCLAMATION|MB_OK 'A service with the given Service Name is already installed on this machine. \
+      Please choose another Service Name'
     Abort "Config not right"
     Goto exit
   ${EndIf}
@@ -815,25 +869,45 @@ Function findJavaHome
   ExpandEnvStrings $0 "%PROGRAMW6432%"
   ${If} $0 != "%PROGRAMW6432%"
     SetRegView 64
-    ReadRegStr $2 HKLM "SOFTWARE\JavaSoft\Java Runtime Environment" "CurrentVersion"
-    ReadRegStr $1 HKLM "SOFTWARE\JavaSoft\Java Runtime Environment\$2" "JavaHome"
-    ReadRegStr $3 HKLM "SOFTWARE\JavaSoft\Java Runtime Environment\$2" "RuntimeLib"
+    ReadRegStr $2 HKLM "SOFTWARE\JavaSoft\JRE" "CurrentVersion"
+    ReadRegStr $1 HKLM "SOFTWARE\JavaSoft\JRE\$2" "JavaHome"
+    ReadRegStr $3 HKLM "SOFTWARE\JavaSoft\JRE\$2" "RuntimeLib"
 
     IfErrors 0 +2
     StrCpy $1 ""
     ClearErrors
+
+    ${If} $1 == ""
+      ReadRegStr $2 HKLM "SOFTWARE\JavaSoft\Java Runtime Environment" "CurrentVersion"
+      ReadRegStr $1 HKLM "SOFTWARE\JavaSoft\Java Runtime Environment\$2" "JavaHome"
+      ReadRegStr $3 HKLM "SOFTWARE\JavaSoft\Java Runtime Environment\$2" "RuntimeLib"
+
+      IfErrors 0 +2
+      StrCpy $1 ""
+      ClearErrors
+    ${EndIf}
   ${EndIf}
 
   ; If no 64-bit Java was found, look for 32-bit Java
   ${If} $1 == ""
     SetRegView 32
-    ReadRegStr $2 HKLM "SOFTWARE\JavaSoft\Java Runtime Environment" "CurrentVersion"
-    ReadRegStr $1 HKLM "SOFTWARE\JavaSoft\Java Runtime Environment\$2" "JavaHome"
-    ReadRegStr $3 HKLM "SOFTWARE\JavaSoft\Java Runtime Environment\$2" "RuntimeLib"
+    ReadRegStr $2 HKLM "SOFTWARE\JavaSoft\JRE" "CurrentVersion"
+    ReadRegStr $1 HKLM "SOFTWARE\JavaSoft\JRE\$2" "JavaHome"
+    ReadRegStr $3 HKLM "SOFTWARE\JavaSoft\JRE\$2" "RuntimeLib"
 
     IfErrors 0 +2
     StrCpy $1 ""
     ClearErrors
+
+    ${If} $1 == ""
+      ReadRegStr $2 HKLM "SOFTWARE\JavaSoft\Java Runtime Environment" "CurrentVersion"
+      ReadRegStr $1 HKLM "SOFTWARE\JavaSoft\Java Runtime Environment\$2" "JavaHome"
+      ReadRegStr $3 HKLM "SOFTWARE\JavaSoft\Java Runtime Environment\$2" "RuntimeLib"
+
+      IfErrors 0 +2
+      StrCpy $1 ""
+      ClearErrors
+    ${EndIf}
 
     ; If using 64-bit, go back to using 64-bit registry
     ${If} $0 != "%PROGRAMW6432%"
@@ -884,7 +958,7 @@ Function findJVMPath
   IfFileExists "$2" FoundJvmDll
 
   ClearErrors
-  ;Step tree: Read defaults from registry
+  ;Step three: Read defaults from registry
 
   ReadRegStr $1 HKLM "SOFTWARE\JavaSoft\Java Runtime Environment" "CurrentVersion"
   ReadRegStr $2 HKLM "SOFTWARE\JavaSoft\Java Runtime Environment\$1" "RuntimeLib"
@@ -1141,6 +1215,12 @@ FunctionEnd
     SetShellVarContext current
     RMDir /r "$SMPROGRAMS\Apache Tomcat @VERSION_MAJOR_MINOR@ $TomcatServiceName"
 
+    ; Before files are removed using recursive deletes, remove any symbolic
+    ; links in the installation directory and the directory structure below it
+    ; to ensure the recursive deletes don't result in any nasty surprises.
+    Push "$INSTDIR"
+    Call un.RemoveSymlinks
+
     Delete "$INSTDIR\tomcat.ico"
     Delete "$INSTDIR\LICENSE"
     Delete "$INSTDIR\NOTICE"
@@ -1178,7 +1258,7 @@ FunctionEnd
   ; =================
   ; uninstall init function
   ;
-  ; Read the command line paramater and set up the service name variables so the
+  ; Read the command line parameter and set up the service name variables so the
   ; uninstaller knows which service it is working with
   ; =================
   Function un.onInit
@@ -1188,6 +1268,49 @@ FunctionEnd
     StrCpy $TomcatServiceFileName $R1.exe
     StrCpy $TomcatServiceManagerFileName $R1w.exe
   FunctionEnd
+
+  ; =================
+  ; Removes symbolic links from the path found on top of the stack.
+  ; The path is removed from the stack as a result of calling this function.
+  ; =================
+  Function un.RemoveSymlinks
+    Pop $0
+    ${GetFileAttributes} "$0" "REPARSE_POINT" $3
+    ; DetailPrint "Processing directory [$0] [$3]"
+    FindFirst $1 $2 $0\*.*
+    ; DetailPrint "Search [$1] found [$2]"
+    StrCmp $3 "1" RemoveSymlinks-delete
+  RemoveSymlinks-loop:
+    ; DetailPrint "Search [$1] processing [$0\$2]"
+    StrCmp $2 "" RemoveSymlinks-exit
+    StrCmp $2 "." RemoveSymlinks-skip
+    StrCmp $2 ".." RemoveSymlinks-skip
+    IfFileExists $0\$2\*.* RemoveSymlinks-directory
+  RemoveSymlinks-skip:
+    ; DetailPrint "Search [$1] ignoring file [$0\$2]"
+    FindNext $1 $2
+    StrCmp $2 "" RemoveSymlinks-exit
+    goto RemoveSymlinks-loop
+  RemoveSymlinks-directory:
+    ; DetailPrint "Search [$1] found directory [$0\$2]"
+    Push $0
+    Push $1
+    Push $0\$2
+    Call un.RemoveSymlinks
+    Pop $1
+    Pop $0
+    ; DetailPrint "Search [$1] restored for [$0]"
+    FindNext $1 $2
+    goto RemoveSymlinks-loop
+  RemoveSymlinks-delete:
+    ; DetailPrint "Deleting symlink [$0]"
+    SetFileAttributes "$0" "NORMAL"
+    System::Call "kernel32::RemoveDirectoryW(w `$0`) i.n"
+  RemoveSymlinks-exit:
+    ; DetailPrint "Search [$1] closed"
+   FindClose $1
+  FunctionEnd
+
 !endif
 
 ;eof

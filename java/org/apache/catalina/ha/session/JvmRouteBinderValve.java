@@ -20,9 +20,7 @@ import java.io.IOException;
 
 import javax.servlet.ServletException;
 
-import org.apache.catalina.Container;
-import org.apache.catalina.Engine;
-import org.apache.catalina.Host;
+import org.apache.catalina.Cluster;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.Manager;
 import org.apache.catalina.Session;
@@ -108,7 +106,7 @@ public class JvmRouteBinderValve extends ValveBase implements ClusterValve {
     protected boolean enabled = true;
 
     /**
-     * number of session that no at this tomcat instanz hosted
+     * number of session that no at this tomcat instance hosted
      */
     protected long numberOfSessions = 0;
 
@@ -236,7 +234,7 @@ public class JvmRouteBinderValve extends ValveBase implements ClusterValve {
     }
 
     /**
-     * get Cluster DeltaManager
+     * get ClusterManager
      *
      * @param request current request
      * @return manager or null
@@ -284,7 +282,7 @@ public class JvmRouteBinderValve extends ValveBase implements ClusterValve {
             Request request, String sessionId, String localJvmRoute) {
         // get requested jvmRoute.
         String requestJvmRoute = null;
-        int index = sessionId.indexOf(".");
+        int index = sessionId.indexOf('.');
         if (index > 0) {
             requestJvmRoute = sessionId
                     .substring(index + 1, sessionId.length());
@@ -381,24 +379,9 @@ public class JvmRouteBinderValve extends ValveBase implements ClusterValve {
     protected synchronized void startInternal() throws LifecycleException {
 
         if (cluster == null) {
-            Container hostContainer = getContainer();
-            // compatibility with JvmRouteBinderValve version 1.1
-            // ( setup at context.xml or context.xml.default )
-            if (!(hostContainer instanceof Host)) {
-                if (log.isWarnEnabled()) {
-                    log.warn(sm.getString("jvmRoute.configure.warn"));
-                }
-                hostContainer = hostContainer.getParent();
-            }
-            if (hostContainer instanceof Host
-                    && ((Host) hostContainer).getCluster() != null) {
-                cluster = (CatalinaCluster) ((Host) hostContainer).getCluster();
-            } else {
-                Container engine = hostContainer.getParent() ;
-                if (engine instanceof Engine
-                        && ((Engine) engine).getCluster() != null) {
-                    cluster = (CatalinaCluster) ((Engine) engine).getCluster();
-                }
+            Cluster containerCluster = getContainer().getCluster();
+            if (containerCluster instanceof CatalinaCluster) {
+                setCluster((CatalinaCluster)containerCluster);
             }
         }
 

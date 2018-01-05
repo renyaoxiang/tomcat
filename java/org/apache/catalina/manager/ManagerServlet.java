@@ -22,9 +22,14 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.security.cert.Certificate;
+import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -56,12 +61,17 @@ import org.apache.catalina.connector.Connector;
 import org.apache.catalina.core.StandardHost;
 import org.apache.catalina.startup.ExpandWar;
 import org.apache.catalina.util.ContextName;
-import org.apache.catalina.util.RequestUtil;
 import org.apache.catalina.util.ServerInfo;
+import org.apache.coyote.ProtocolHandler;
+import org.apache.coyote.http11.AbstractHttp11Protocol;
 import org.apache.tomcat.util.Diagnostics;
 import org.apache.tomcat.util.ExceptionUtils;
 import org.apache.tomcat.util.modeler.Registry;
+import org.apache.tomcat.util.net.SSLContext;
+import org.apache.tomcat.util.net.SSLHostConfig;
+import org.apache.tomcat.util.net.SSLHostConfigCertificate;
 import org.apache.tomcat.util.res.StringManager;
+import org.apache.tomcat.util.security.Escape;
 
 
 /**
@@ -137,15 +147,6 @@ import org.apache.tomcat.util.res.StringManager;
  *     path of a directory that contains the unpacked version of a web
  *     application.  This directory will be attached to the context path you
  *     specify without any changes.</li>
- * <li><b>jar:file:/absolute/path/to/a/warfile.war!/</b> - You can specify a
- *     URL to a local web application archive file.  The syntax must conform to
- *     the rules specified by the <code>JarURLConnection</code> class for a
- *     reference to an entire JAR file.</li>
- * <li><b>jar:http://hostname:port/path/to/a/warfile.war!/</b> - You can specify
- *     a URL to a remote (HTTP-accessible) web application archive file.  The
- *     syntax must conform to the rules specified by the
- *     <code>JarURLConnection</code> class for a reference to an entire
- *     JAR file.</li>
  * </ul>
  * <p>
  * <b>NOTE</b> - Attempting to reload or remove the application containing
@@ -239,9 +240,7 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
      */
     @Override
     public Wrapper getWrapper() {
-
-        return (this.wrapper);
-
+        return this.wrapper;
     }
 
 
@@ -326,6 +325,7 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
             && (request.getParameter("update").equals("true"))) {
             update = true;
         }
+        String tlsHostName = request.getParameter("tlsHostName");
 
         boolean statusLine = false;
         if ("true".equals(request.getParameter("statusLine"))) {
@@ -376,6 +376,12 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
             threadDump(writer, smClient, request.getLocales());
         } else if (command.equals("/sslConnectorCiphers")) {
             sslConnectorCiphers(writer, smClient);
+        } else if (command.equals("/sslConnectorCerts")) {
+            sslConnectorCerts(writer, smClient);
+        } else if (command.equals("/sslConnectorTrustedCerts")) {
+            sslConnectorTrustedCerts(writer, smClient);
+        } else if (command.equals("/sslReload")) {
+            sslReload(writer, tlsHostName, smClient);
         } else {
             writer.println(smClient.getString("managerServlet.unknownCommand",
                     command));
@@ -509,6 +515,10 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
 
     /**
      * Find potential memory leaks caused by web application reload.
+     *
+     * @param statusLine Print a status line
+     * @param writer The output writer
+     * @param smClient StringManager for the client's locale
      */
     protected void findleaks(boolean statusLine, PrintWriter writer,
             StringManager smClient) {
@@ -538,11 +548,47 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
     }
 
 
+    protected void sslReload(PrintWriter writer, String tlsHostName, StringManager smClient) {
+        Connector connectors[] = getConnectors();
+        boolean found = false;
+        for (Connector connector : connectors) {
+            if (Boolean.TRUE.equals(connector.getProperty("SSLEnabled"))) {
+                ProtocolHandler protocol = connector.getProtocolHandler();
+                if (protocol instanceof AbstractHttp11Protocol<?>) {
+                    AbstractHttp11Protocol<?> http11Protoocol = (AbstractHttp11Protocol<?>) protocol;
+                    if (tlsHostName == null || tlsHostName.length() == 0) {
+                        found = true;
+                        http11Protoocol.reloadSsslHostConfigs();
+                    } else {
+                        SSLHostConfig[] sslHostConfigs = http11Protoocol.findSslHostConfigs();
+                        for (SSLHostConfig sslHostConfig : sslHostConfigs) {
+                            if (sslHostConfig.getHostName().equalsIgnoreCase(tlsHostName)) {
+                                found = true;
+                                http11Protoocol.reloadSsslHostConfig(tlsHostName);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (found) {
+            if (tlsHostName == null || tlsHostName.length() == 0) {
+                writer.println(smClient.getString("managerServlet.sslReloadAll"));
+            } else {
+                writer.println(smClient.getString("managerServlet.sslReload", tlsHostName));
+            }
+        } else {
+            writer.println(smClient.getString("managerServlet.sslReloadFail"));
+        }
+    }
+
+
     /**
+     * Write some VM info.
      *
-     * Write some VM info
-     *
-     * @param writer
+     * @param writer The output writer
+     * @param smClient StringManager for the client's locale
+     * @param requestedLocales the client's locales
      */
     protected void vmInfo(PrintWriter writer, StringManager smClient,
             Enumeration<Locale> requestedLocales) {
@@ -551,10 +597,11 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
     }
 
     /**
+     * Write a JVM thread dump.
      *
-     * Write a JVM thread dump
-     *
-     * @param writer
+     * @param writer The output writer
+     * @param smClient StringManager for the client's locale
+     * @param requestedLocales the client's locales
      */
     protected void threadDump(PrintWriter writer, StringManager smClient,
             Enumeration<Locale> requestedLocales) {
@@ -562,16 +609,39 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
         writer.print(Diagnostics.getThreadDump(requestedLocales));
     }
 
-    protected void sslConnectorCiphers(PrintWriter writer,
-            StringManager smClient) {
-        writer.println(smClient.getString(
-                "managerServlet.sslConnectorCiphers"));
-        Map<String,Set<String>> connectorCiphers = getConnectorCiphers();
-        for (Map.Entry<String,Set<String>> entry : connectorCiphers.entrySet()) {
+
+    protected void sslConnectorCiphers(PrintWriter writer, StringManager smClient) {
+        writer.println(smClient.getString("managerServlet.sslConnectorCiphers"));
+        Map<String,List<String>> connectorCiphers = getConnectorCiphers();
+        for (Map.Entry<String,List<String>> entry : connectorCiphers.entrySet()) {
             writer.println(entry.getKey());
             for (String cipher : entry.getValue()) {
                 writer.print("  ");
                 writer.println(cipher);
+            }
+        }
+    }
+
+
+    private void sslConnectorCerts(PrintWriter writer, StringManager smClient) {
+        writer.println(smClient.getString("managerServlet.sslConnectorCerts"));
+        Map<String,List<String>> connectorCerts = getConnectorCerts();
+        for (Map.Entry<String,List<String>> entry : connectorCerts.entrySet()) {
+            writer.println(entry.getKey());
+            for (String cert : entry.getValue()) {
+                writer.println(cert);
+            }
+        }
+    }
+
+
+    private void sslConnectorTrustedCerts(PrintWriter writer, StringManager smClient) {
+        writer.println(smClient.getString("managerServlet.sslConnectorTrustedCerts"));
+        Map<String,List<String>> connectorTrustedCerts = getConnectorTrustedCerts();
+        for (Map.Entry<String,List<String>> entry : connectorTrustedCerts.entrySet()) {
+            writer.println(entry.getKey());
+            for (String cert : entry.getValue()) {
+                writer.println(cert);
             }
         }
     }
@@ -611,7 +681,6 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
                 log("managerServlet.storeConfig", e);
                 writer.println(smClient.getString("managerServlet.exception",
                         e.toString()));
-                return;
             }
         } else {
             String contextPath = path;
@@ -634,7 +703,6 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
                 log("managerServlet.save[" + path + "]", e);
                 writer.println(smClient.getString("managerServlet.exception",
                         e.toString()));
-                return;
             }
         }
     }
@@ -723,7 +791,11 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
                             return;
                         }
                         // Rename uploaded WAR file
-                        uploadedWar.renameTo(deployedWar);
+                        if (!uploadedWar.renameTo(deployedWar)) {
+                            writer.println(smClient.getString("managerServlet.renameFail",
+                                    uploadedWar, deployedWar));
+                            return;
+                        }
                     }
                     if (tag != null) {
                         // Copy WAR to the host's appBase
@@ -941,6 +1013,7 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
      * Render a list of the currently active Contexts in our virtual host.
      *
      * @param writer Writer to render to
+     * @param smClient i18n support for current client's locale
      */
     protected void list(PrintWriter writer, StringManager smClient) {
 
@@ -980,6 +1053,7 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
      *
      * @param writer Writer to render to
      * @param cn Name of the application to be restarted
+     * @param smClient i18n support for current client's locale
      */
     protected void reload(PrintWriter writer, ContextName cn,
             StringManager smClient) {
@@ -995,7 +1069,7 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
             Context context = (Context) host.findChild(cn.getName());
             if (context == null) {
                 writer.println(smClient.getString("managerServlet.noContext",
-                        RequestUtil.filter(cn.getDisplayName())));
+                        Escape.htmlElementContent(cn.getDisplayName())));
                 return;
             }
             // It isn't possible for the manager to reload itself
@@ -1019,8 +1093,10 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
     /**
      * Render a list of available global JNDI resources.
      *
+     * @param writer Writer to render to
      * @param type Fully qualified class name of the resource type of interest,
      *  or <code>null</code> to list resources of all types
+     * @param smClient i18n support for current client's locale
      */
     protected void resources(PrintWriter writer, String type,
             StringManager smClient) {
@@ -1067,6 +1143,14 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
 
     /**
      * List the resources of the given context.
+     * @param writer Writer to render to
+     * @param prefix Path for recursion
+     * @param namingContext The naming context for lookups
+     * @param type Fully qualified class name of the resource type of interest,
+     *  or <code>null</code> to list resources of all types
+     * @param clazz The resource class or <code>null</code> to list
+     *  resources of all types
+     * @param smClient i18n support for current client's locale
      */
     protected void printResources(PrintWriter writer, String prefix,
                                   javax.naming.Context namingContext,
@@ -1107,7 +1191,8 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
     /**
      * Writes System OS and JVM properties.
      * @param writer Writer to render to
-     */
+     * @param smClient i18n support for current client's locale
+    */
     protected void serverinfo(PrintWriter writer,  StringManager smClient) {
         if (debug >= 1)
             log("serverinfo");
@@ -1143,6 +1228,7 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
      * @param writer Writer to render to
      * @param cn Name of the application to list session information for
      * @param idle Expire all sessions with idle time &gt; idle for this context
+     * @param smClient i18n support for current client's locale
      */
     protected void sessions(PrintWriter writer, ContextName cn, int idle,
             StringManager smClient) {
@@ -1163,18 +1249,18 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
             Context context = (Context) host.findChild(cn.getName());
             if (context == null) {
                 writer.println(smClient.getString("managerServlet.noContext",
-                        RequestUtil.filter(displayPath)));
+                        Escape.htmlElementContent(displayPath)));
                 return;
             }
             Manager manager = context.getManager() ;
             if(manager == null) {
                 writer.println(smClient.getString("managerServlet.noManager",
-                        RequestUtil.filter(displayPath)));
+                        Escape.htmlElementContent(displayPath)));
                 return;
             }
             int maxCount = 60;
             int histoInterval = 1;
-            int maxInactiveInterval = manager.getMaxInactiveInterval()/60;
+            int maxInactiveInterval = context.getSessionTimeout();
             if (maxInactiveInterval > 0) {
                 histoInterval = maxInactiveInterval / maxCount;
                 if (histoInterval * maxCount < maxInactiveInterval)
@@ -1245,11 +1331,12 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
 
 
     /**
-     *
      * Extract the expiration request parameter
      *
-     * @param cn
-     * @param req
+     * @param writer Writer to render to
+     * @param cn Name of the application to list session information for
+     * @param req The Servlet request
+     * @param smClient i18n support for current client's locale
      */
     protected void expireSessions(PrintWriter writer, ContextName cn,
             HttpServletRequest req, StringManager smClient) {
@@ -1270,6 +1357,7 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
      *
      * @param writer Writer to render to
      * @param cn Name of the application to be started
+     * @param smClient i18n support for current client's locale
      */
     protected void start(PrintWriter writer, ContextName cn,
             StringManager smClient) {
@@ -1287,7 +1375,7 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
             Context context = (Context) host.findChild(cn.getName());
             if (context == null) {
                 writer.println(smClient.getString("managerServlet.noContext",
-                        RequestUtil.filter(displayPath)));
+                        Escape.htmlElementContent(displayPath)));
                 return;
             }
             context.start();
@@ -1315,6 +1403,7 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
      *
      * @param writer Writer to render to
      * @param cn Name of the application to be stopped
+     * @param smClient i18n support for current client's locale
      */
     protected void stop(PrintWriter writer, ContextName cn,
             StringManager smClient) {
@@ -1332,7 +1421,7 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
             Context context = (Context) host.findChild(cn.getName());
             if (context == null) {
                 writer.println(smClient.getString("managerServlet.noContext",
-                        RequestUtil.filter(displayPath)));
+                        Escape.htmlElementContent(displayPath)));
                 return;
             }
             // It isn't possible for the manager to stop itself
@@ -1358,6 +1447,7 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
      *
      * @param writer Writer to render to
      * @param cn Name of the application to be removed
+     * @param smClient i18n support for current client's locale
      */
     protected void undeploy(PrintWriter writer, ContextName cn,
             StringManager smClient) {
@@ -1379,13 +1469,13 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
             Context context = (Context) host.findChild(name);
             if (context == null) {
                 writer.println(smClient.getString("managerServlet.noContext",
-                        RequestUtil.filter(displayPath)));
+                        Escape.htmlElementContent(displayPath)));
                 return;
             }
 
             if (!isDeployed(name)) {
                 writer.println(smClient.getString("managerServlet.notDeployed",
-                        RequestUtil.filter(displayPath)));
+                        Escape.htmlElementContent(displayPath)));
                 return;
             }
 
@@ -1439,6 +1529,10 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
 
     /**
      * Invoke the isDeployed method on the deployer.
+     *
+     * @param name The webapp name
+     * @return <code>true</code> if a webapp with that name is deployed
+     * @throws Exception Propagate JMX invocation error
      */
     protected boolean isDeployed(String name)
         throws Exception {
@@ -1452,6 +1546,9 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
 
     /**
      * Invoke the check method on the deployer.
+     *
+     * @param name The webapp name
+     * @throws Exception Propagate JMX invocation error
      */
     protected void check(String name)
         throws Exception {
@@ -1463,6 +1560,10 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
 
     /**
      * Invoke the isServiced method on the deployer.
+     *
+     * @param name The webapp name
+     * @return <code>true</code> if a webapp with that name is being serviced
+     * @throws Exception Propagate JMX invocation error
      */
     protected boolean isServiced(String name)
         throws Exception {
@@ -1476,6 +1577,9 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
 
     /**
      * Invoke the addServiced method on the deployer.
+     *
+     * @param name The webapp name
+     * @throws Exception Propagate JMX invocation error
      */
     protected void addServiced(String name)
         throws Exception {
@@ -1487,6 +1591,9 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
 
     /**
      * Invoke the removeServiced method on the deployer.
+     *
+     * @param name The webapp name
+     * @throws Exception Propagate JMX invocation error
      */
     protected void removeServiced(String name)
         throws Exception {
@@ -1501,6 +1608,7 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
      * subdirectories recursively. The code assumes that the directory exists.
      *
      * @param dir File object representing the directory to be deleted.
+     * @return <code>true</code> if the deletion was successful
      */
     protected boolean undeployDir(File dir) {
 
@@ -1578,7 +1686,7 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
 
         String path = null;
         if (cn != null) {
-            path = RequestUtil.filter(cn.getPath());
+            path = Escape.htmlElementContent(cn.getPath());
         }
         writer.println(sm.getString("managerServlet.invalidPath", path));
         return false;
@@ -1589,6 +1697,7 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
      *
      * @param src File object representing the source
      * @param dest File object representing the destination
+     * @return <code>true</code> if the copy was successful
      */
     public static boolean copy(File src, File dest) {
         boolean result = false;
@@ -1609,6 +1718,8 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
      *
      * @param src File object representing the source
      * @param dest File object representing the destination
+     * @param buf Temp byte buffer
+     * @return <code>true</code> if the copy was successful
      */
     public static boolean copyInternal(File src, File dest, byte[] buf) {
 
@@ -1650,25 +1761,108 @@ public class ManagerServlet extends HttpServlet implements ContainerServlet {
     }
 
 
-    protected Map<String,Set<String>> getConnectorCiphers() {
-        Map<String,Set<String>> result = new HashMap<>();
+    protected Map<String,List<String>> getConnectorCiphers() {
+        Map<String,List<String>> result = new HashMap<>();
 
-        Engine e = (Engine) host.getParent();
-        Service s = e.getService();
-        Connector connectors[] = s.findConnectors();
+        Connector connectors[] = getConnectors();
         for (Connector connector : connectors) {
-            Set<String> cipherList = new HashSet<>();
             if (Boolean.TRUE.equals(connector.getProperty("SSLEnabled"))) {
-                String[] ciphersUsed =
-                        (String[]) connector.getProperty("ciphersUsed");
-                for (String cipherUsed : ciphersUsed) {
-                    cipherList.add(cipherUsed);
+                SSLHostConfig[] sslHostConfigs = connector.getProtocolHandler().findSslHostConfigs();
+                for (SSLHostConfig sslHostConfig : sslHostConfigs) {
+                    String name = connector.toString() + "-" + sslHostConfig.getHostName();
+                    /* Add cipher list, keep order but remove duplicates */
+                    result.put(name, new ArrayList<>(new LinkedHashSet<>(
+                        Arrays.asList(sslHostConfig.getEnabledCiphers()))));
                 }
             } else {
+                ArrayList<String> cipherList = new ArrayList<>(1);
                 cipherList.add(sm.getString("managerServlet.notSslConnector"));
+                result.put(connector.toString(), cipherList);
             }
-            result.put(connector.toString(), cipherList);
         }
         return result;
+    }
+
+
+    protected Map<String,List<String>> getConnectorCerts() {
+        Map<String,List<String>> result = new HashMap<>();
+
+        Connector connectors[] = getConnectors();
+        for (Connector connector : connectors) {
+            if (Boolean.TRUE.equals(connector.getProperty("SSLEnabled"))) {
+                SSLHostConfig[] sslHostConfigs = connector.getProtocolHandler().findSslHostConfigs();
+                for (SSLHostConfig sslHostConfig : sslHostConfigs) {
+                    Set<SSLHostConfigCertificate> sslHostConfigCerts =
+                            sslHostConfig.getCertificates();
+                    for (SSLHostConfigCertificate sslHostConfigCert : sslHostConfigCerts) {
+                        String name = connector.toString() + "-" + sslHostConfig.getHostName() +
+                                "-" + sslHostConfigCert.getType();
+                        List<String> certList = new ArrayList<>();
+                        SSLContext sslContext = sslHostConfigCert.getSslContext();
+                        String alias = sslHostConfigCert.getCertificateKeyAlias();
+                        if (alias == null) {
+                            alias = "tomcat";
+                        }
+                        X509Certificate[] certs = sslContext.getCertificateChain(alias);
+                        if (certs == null) {
+                            certList.add(sm.getString("managerServlet.certsNotAvailable"));
+                        } else {
+                            for (Certificate cert : certs) {
+                                certList.add(cert.toString());
+                            }
+                        }
+                        result.put(name, certList);
+                    }
+                }
+            } else {
+                List<String> certList = new ArrayList<>(1);
+                certList.add(sm.getString("managerServlet.notSslConnector"));
+                result.put(connector.toString(), certList);
+            }
+        }
+
+        return result;
+    }
+
+
+    protected Map<String,List<String>> getConnectorTrustedCerts() {
+        Map<String,List<String>> result = new HashMap<>();
+
+        Connector connectors[] = getConnectors();
+        for (Connector connector : connectors) {
+            if (Boolean.TRUE.equals(connector.getProperty("SSLEnabled"))) {
+                SSLHostConfig[] sslHostConfigs = connector.getProtocolHandler().findSslHostConfigs();
+                for (SSLHostConfig sslHostConfig : sslHostConfigs) {
+                    String name = connector.toString() + "-" + sslHostConfig.getHostName();
+                    List<String> certList = new ArrayList<>();
+                    SSLContext sslContext =
+                            sslHostConfig.getCertificates().iterator().next().getSslContext();
+                    X509Certificate[] certs = sslContext.getAcceptedIssuers();
+                    if (certs == null) {
+                        certList.add(sm.getString("managerServlet.certsNotAvailable"));
+                    } else if (certs.length == 0) {
+                        certList.add(sm.getString("managerServlet.trustedCertsNotConfigured"));
+                    } else {
+                        for (Certificate cert : certs) {
+                            certList.add(cert.toString());
+                        }
+                    }
+                    result.put(name, certList);
+                }
+            } else {
+                List<String> certList = new ArrayList<>(1);
+                certList.add(sm.getString("managerServlet.notSslConnector"));
+                result.put(connector.toString(), certList);
+            }
+        }
+
+        return result;
+    }
+
+
+    private Connector[] getConnectors() {
+        Engine e = (Engine) host.getParent();
+        Service s = e.getService();
+        return s.findConnectors();
     }
 }

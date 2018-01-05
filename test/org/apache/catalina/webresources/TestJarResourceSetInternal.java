@@ -41,8 +41,8 @@ public class TestJarResourceSetInternal extends AbstractTestResourceSet {
     }
 
     @Override
-    public String getBaseDir() {
-        return "test/webresources";
+    public File getBaseDir() {
+        return new File("test/webresources");
     }
 
     @Override
@@ -50,5 +50,20 @@ public class TestJarResourceSetInternal extends AbstractTestResourceSet {
     public void testNoArgConstructor() {
         @SuppressWarnings("unused")
         Object obj = new JarResourceSet();
+    }
+
+    @Override
+    protected String getNewDirName() {
+        return "test-dir-09";
+    }
+
+    @Override
+    protected String getNewFileNameNull() {
+        return "test-null-09";
+    }
+
+    @Override
+    protected String getNewFileName() {
+        return "test-file-09";
     }
 }

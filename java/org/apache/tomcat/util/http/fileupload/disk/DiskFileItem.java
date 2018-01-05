@@ -140,6 +140,12 @@ public class DiskFileItem
      */
     private FileItemHeaders headers;
 
+    /**
+     * Default content charset to be used when no explicit charset
+     * parameter is provided by the sender.
+     */
+    private String defaultCharset = DEFAULT_CHARSET;
+
     // ----------------------------------------------------------- Constructors
 
     /**
@@ -335,7 +341,7 @@ public class DiskFileItem
         byte[] rawdata = get();
         String charset = getCharSet();
         if (charset == null) {
-            charset = DEFAULT_CHARSET;
+            charset = defaultCharset;
         }
         try {
             return new String(rawdata, charset);
@@ -371,10 +377,9 @@ public class DiskFileItem
             try {
                 fout = new FileOutputStream(file);
                 fout.write(get());
+                fout.close();
             } finally {
-                if (fout != null) {
-                    fout.close();
-                }
+                IOUtils.closeQuietly(fout);
             }
         } else {
             File outputFile = getStoreLocation();
@@ -423,7 +428,7 @@ public class DiskFileItem
     public void delete() {
         cachedContent = null;
         File outputFile = getStoreLocation();
-        if (outputFile != null && outputFile.exists()) {
+        if (outputFile != null && !isInMemory() && outputFile.exists()) {
             outputFile.delete();
         }
     }
@@ -490,7 +495,7 @@ public class DiskFileItem
      * be used for storing the contents of the file.
      *
      * @return An {@link java.io.OutputStream OutputStream} that can be used
-     *         for storing the contensts of the file.
+     *         for storing the contents of the file.
      *
      * @throws IOException if an error occurs.
      */
@@ -523,6 +528,9 @@ public class DiskFileItem
         if (dfos == null) {
             return null;
         }
+        if (isInMemory()) {
+            return null;
+        }
         return dfos.getFile();
     }
 
@@ -533,7 +541,7 @@ public class DiskFileItem
      */
     @Override
     protected void finalize() {
-        if (dfos == null) {
+        if (dfos == null || dfos.isInMemory()) {
             return;
         }
         File outputFile = dfos.getFile();
@@ -573,7 +581,7 @@ public class DiskFileItem
 
     /**
      * Returns an identifier that is unique within the class loader used to
-     * load this class, but does not have random-like apearance.
+     * load this class, but does not have random-like appearance.
      *
      * @return A String with the non-random looking instance identifier.
      */
@@ -620,4 +628,21 @@ public class DiskFileItem
         headers = pHeaders;
     }
 
+    /**
+     * Returns the default charset for use when no explicit charset
+     * parameter is provided by the sender.
+     * @return the default charset
+     */
+    public String getDefaultCharset() {
+        return defaultCharset;
+    }
+
+    /**
+     * Sets the default charset for use when no explicit charset
+     * parameter is provided by the sender.
+     * @param charset the default charset
+     */
+    public void setDefaultCharset(String charset) {
+        defaultCharset = charset;
+    }
 }

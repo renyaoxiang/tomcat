@@ -1,4 +1,4 @@
-<?xml version="1.0"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <!--
  Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -119,7 +119,7 @@
           excludes="build.xml"
           includes="jdbc-pool.xml">
       <param name="relative-path" expression="http://tomcat.apache.org/tomcat-6.0-doc"/>
-      <param name="apache-logo" expression="/images/asf-logo.gif"/>
+      <param name="apache-logo" expression="/images/asf-logo.svg"/>
     </xslt>
     <move tofile="${basedir}/src/main/java/org/apache/tomcat/jdbc/pool/package.html"
           file="${basedir}/src/main/java/org/apache/tomcat/jdbc/pool/jdbc-pool.html"/>
@@ -241,7 +241,7 @@
           excludes="build.xml project.xml"
           includes="*.xml">
       <param name="relative-path" expression="http://tomcat.apache.org/tomcat-6.0-doc"/>
-      <param name="apache-logo" expression="/images/asf-logo.gif"/>
+      <param name="apache-logo" expression="/images/asf-logo.svg"/>
     </xslt>
   </target>
 
@@ -397,10 +397,10 @@
       <param name="destdir" value="${base.path}"/>
     </antcall>
      -->
-    <antcall target="downloadzip">
+    <antcall target="downloadfile">
       <param name="sourcefile" value="${h2.loc}"/>
       <param name="destfile" value="${h2.jar}"/>
-      <param name="destdir" value="${base.path}"/>
+      <param name="destdir" value="${h2.home}"/>
     </antcall>
     <antcall target="downloadfile">
       <param name="sourcefile" value="${junit.loc}"/>
@@ -424,10 +424,10 @@
       <param name="destdir" value="${base.path}"/>
     </antcall>
      -->
-    <antcall target="downloadzip">
+    <antcall target="downloadfile">
       <param name="sourcefile" value="${h2.loc}"/>
       <param name="destfile" value="${h2.jar}"/>
-      <param name="destdir" value="${base.path}"/>
+      <param name="destdir" value="${h2.home}"/>
     </antcall>
     <antcall target="downloadfile">
       <param name="sourcefile" value="${junit.loc}"/>

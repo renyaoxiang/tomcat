@@ -241,6 +241,9 @@ public class FailedContext extends LifecycleMBeanBase implements Context {
     public Log getLogger() { return null; }
 
     @Override
+    public String getLogName() { return null; }
+
+    @Override
     public Manager getManager() { return null; }
     @Override
     public void setManager(Manager manager) { /* NO-OP */ }
@@ -530,13 +533,6 @@ public class FailedContext extends LifecycleMBeanBase implements Context {
     public void removeFilterMap(FilterMap filterMap) { /* NO-OP */ }
 
     @Override
-    public void addInstanceListener(String listener) { /* NO-OP */ }
-    @Override
-    public String[] findInstanceListeners() { return null; }
-    @Override
-    public void removeInstanceListener(String listener) { /* NO-OP */ }
-
-    @Override
     public void addLocaleEncodingMappingParameter(String locale, String encoding) { /* NO-OP */ }
 
     @Override
@@ -574,9 +570,7 @@ public class FailedContext extends LifecycleMBeanBase implements Context {
     public void removeSecurityRole(String role) { /* NO-OP */ }
 
     @Override
-    public void addServletMapping(String pattern, String name) { /* NO-OP */ }
-    @Override
-    public void addServletMapping(String pattern, String name,
+    public void addServletMappingDecoded(String pattern, String name,
             boolean jspWildcard) { /* NO-OP */ }
     @Override
     public String findServletMapping(String pattern) { return null; }
@@ -761,4 +755,48 @@ public class FailedContext extends LifecycleMBeanBase implements Context {
 
     @Override
     public CookieProcessor getCookieProcessor() { return null; }
+
+    @Override
+    public void setValidateClientProvidedNewSessionId(boolean validateClientProvidedNewSessionId) {
+        // NO-OP
+    }
+
+    @Override
+    public boolean getValidateClientProvidedNewSessionId() { return false; }
+
+    @Override
+    public void setMapperContextRootRedirectEnabled(boolean mapperContextRootRedirectEnabled) {
+        // NO-OP
+    }
+
+    @Override
+    public boolean getMapperContextRootRedirectEnabled() { return false; }
+
+    @Override
+    public void setMapperDirectoryRedirectEnabled(boolean mapperDirectoryRedirectEnabled) {
+        // NO-OP
+    }
+
+    @Override
+    public boolean getMapperDirectoryRedirectEnabled() { return false; }
+
+    @Override
+    public void setUseRelativeRedirects(boolean useRelativeRedirects) { /* NO-OP */ }
+    @Override
+    public boolean getUseRelativeRedirects() { return true; }
+
+    @Override
+    public void setDispatchersUseEncodedPaths(boolean dispatchersUseEncodedPaths) { /* NO-OP */ }
+    @Override
+    public boolean getDispatchersUseEncodedPaths() { return true; }
+
+    @Override
+    public void setRequestCharacterEncoding(String encoding) { /* NO-OP */ }
+    @Override
+    public String getRequestCharacterEncoding() { return null; }
+
+    @Override
+    public void setResponseCharacterEncoding(String encoding) { /* NO-OP */ }
+    @Override
+    public String getResponseCharacterEncoding() { return null; }
 }

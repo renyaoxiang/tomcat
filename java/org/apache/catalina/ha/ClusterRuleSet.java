@@ -14,14 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-
 package org.apache.catalina.ha;
 
-
 import org.apache.tomcat.util.digester.Digester;
-import org.apache.tomcat.util.digester.RuleSetBase;
-
+import org.apache.tomcat.util.digester.RuleSet;
 
 /**
  * <p><strong>RuleSet</strong> for processing the contents of a
@@ -29,7 +25,7 @@ import org.apache.tomcat.util.digester.RuleSetBase;
  *
  * @author Peter Rossbach
  */
-public class ClusterRuleSet extends RuleSetBase {
+public class ClusterRuleSet implements RuleSet {
 
 
     // ----------------------------------------------------- Instance Variables
@@ -49,9 +45,7 @@ public class ClusterRuleSet extends RuleSetBase {
      * matching pattern prefix.
      */
     public ClusterRuleSet() {
-
         this("");
-
     }
 
 
@@ -63,8 +57,6 @@ public class ClusterRuleSet extends RuleSetBase {
      *  trailing slash character)
      */
     public ClusterRuleSet(String prefix) {
-        super();
-        this.namespaceURI = null;
         this.prefix = prefix;
     }
 
@@ -119,6 +111,14 @@ public class ClusterRuleSet extends RuleSetBase {
                             "setMembershipService",
                             "org.apache.catalina.tribes.MembershipService");
 
+        digester.addObjectCreate(channelPrefix + "MembershipListener",
+                                 null, // MUST be specified in the element
+                                 "className");
+        digester.addSetProperties(channelPrefix + "MembershipListener");
+        digester.addSetNext(channelPrefix + "MembershipListener",
+                            "addMembershipListener",
+                            "org.apache.catalina.tribes.MembershipListener");
+
         digester.addObjectCreate(channelPrefix + "Sender",
                                  null, // MUST be specified in the element
                                  "className");
@@ -152,6 +152,13 @@ public class ClusterRuleSet extends RuleSetBase {
                             "addInterceptor",
                             "org.apache.catalina.tribes.ChannelInterceptor");
 
+        digester.addObjectCreate(channelPrefix + "Interceptor/LocalMember",
+                                 null, // MUST be specified in the element
+                                 "className");
+        digester.addSetProperties(channelPrefix + "Interceptor/LocalMember");
+        digester.addSetNext(channelPrefix + "Interceptor/LocalMember",
+                            "setLocalMember",
+                            "org.apache.catalina.tribes.Member");
 
         digester.addObjectCreate(channelPrefix + "Interceptor/Member",
                                  null, // MUST be specified in the element
@@ -161,6 +168,13 @@ public class ClusterRuleSet extends RuleSetBase {
                             "addStaticMember",
                             "org.apache.catalina.tribes.Member");
 
+        digester.addObjectCreate(channelPrefix + "ChannelListener",
+                                 null, // MUST be specified in the element
+                                 "className");
+        digester.addSetProperties(channelPrefix + "ChannelListener");
+        digester.addSetNext(channelPrefix + "ChannelListener",
+                            "addChannelListener",
+                            "org.apache.catalina.tribes.ChannelListener");
 
         digester.addObjectCreate(prefix + "Valve",
                                  null, // MUST be specified in the element

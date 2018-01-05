@@ -1,4 +1,4 @@
-<?xml version="1.0"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <!--
  Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -48,6 +48,8 @@
   <property name="jsp.revision" value="FR" />
   <property name="el.revision" value="FR" />
   <property name="websocket.revision" value="FR" />
+  <!-- MR B but this was first 1.1 release so use FR -->
+  <property name="jaspic.revision" value="FR" />
 
   <!-- Release artifact base names -->
   <property name="final.name"            value="${project}-${version}" />
@@ -69,9 +71,11 @@
   <property name="tomcat.release"        value="${tomcat.output}/release"/>
   <property name="tomcat.src.jars"       value="${tomcat.output}/src-jars"/>
   <property name="test.classes"          value="${tomcat.output}/testclasses"/>
+  <property name="test.run.classes"      value="${tomcat.output}/classes"/>
   <property name="test.temp"             value="${tomcat.output}/test-tmp"/>
-  <property name="test.reports"          value="${tomcat.build}/logs"/>
-  <property name="test.apr.loc"          value="${tomcat.build}/bin/native"/>
+  <property name="test.basedir"          value="${tomcat.build}"/>
+  <property name="test.reports"          value="${test.basedir}/logs"/>
+  <property name="test.apr.loc"          value="${test.basedir}/bin/native"/>
   <!-- base directory for jdbc-pool -->
   <property name="tomcat.jdbc.dir"       value="${basedir}/modules/jdbc-pool"/>
   <!-- build output directory for jdbc-pool -->
@@ -91,6 +95,7 @@
   <property name="jsp-api.jar" value="${tomcat.build}/lib/jsp-api.jar"/>
   <property name="el-api.jar" value="${tomcat.build}/lib/el-api.jar"/>
   <property name="websocket-api.jar" value="${tomcat.build}/lib/websocket-api.jar"/>
+  <property name="jaspic-api.jar" value="${tomcat.build}/lib/jaspic-api.jar"/>
   <property name="tomcat-websocket.jar" value="${tomcat.build}/lib/tomcat-websocket.jar"/>
   <property name="catalina.jar" value="${tomcat.build}/lib/catalina.jar"/>
   <property name="catalina-tribes.jar" value="${tomcat.build}/lib/catalina-tribes.jar"/>
@@ -100,7 +105,6 @@
   <property name="tomcat-coyote.jar" value="${tomcat.build}/lib/tomcat-coyote.jar"/>
   <property name="tomcat-dbcp.jar" value="${tomcat.build}/lib/tomcat-dbcp.jar"/>
   <property name="tomcat-jni.jar" value="${tomcat.build}/lib/tomcat-jni.jar"/>
-  <property name="tomcat-spdy.jar" value="${tomcat.build}/lib/tomcat-spdy.jar"/>
   <property name="tomcat-api.jar" value="${tomcat.build}/lib/tomcat-api.jar"/>
   <property name="tomcat-util.jar" value="${tomcat.build}/lib/tomcat-util.jar"/>
   <property name="tomcat-util-scan.jar" value="${tomcat.build}/lib/tomcat-util-scan.jar"/>
@@ -117,6 +121,7 @@
   <property name="jsp-api-src.jar" value="${tomcat.src.jars}/jsp-api-src.jar"/>
   <property name="el-api-src.jar" value="${tomcat.src.jars}/el-api-src.jar"/>
   <property name="websocket-api-src.jar" value="${tomcat.src.jars}/websocket-api-src.jar"/>
+  <property name="jaspic-api-src.jar" value="${tomcat.src.jars}/jaspic-api-src.jar"/>
   <property name="tomcat-websocket-src.jar" value="${tomcat.src.jars}/tomcat-websocket-src.jar"/>
   <property name="catalina-src.jar" value="${tomcat.src.jars}/catalina-src.jar"/>
   <property name="catalina-tribes-src.jar" value="${tomcat.src.jars}/catalina-tribes-src.jar"/>
@@ -124,7 +129,6 @@
   <property name="catalina-ant-src.jar" value="${tomcat.src.jars}/catalina-ant-src.jar"/>
   <property name="catalina-storeconfig-src.jar" value="${tomcat.src.jars}/catalina-storeconfig-src.jar"/>
   <property name="tomcat-jni-src.jar" value="${tomcat.src.jars}/tomcat-jni-src.jar"/>
-  <property name="tomcat-spdy-src.jar" value="${tomcat.src.jars}/tomcat-spdy-src.jar"/>
   <property name="tomcat-coyote-src.jar" value="${tomcat.src.jars}/tomcat-coyote-src.jar"/>
   <property name="tomcat-dbcp-src.jar" value="${tomcat.src.jars}/tomcat-dbcp-src.jar"/>
   <property name="tomcat-api-src.jar" value="${tomcat.src.jars}/tomcat-api-src.jar"/>
@@ -139,27 +143,18 @@
   <property name="tomcat-embed-jasper.jar" value="${tomcat.embed}/tomcat-embed-jasper.jar"/>
   <property name="tomcat-embed-el.jar" value="${tomcat.embed}/tomcat-embed-el.jar"/>
   <property name="tomcat-embed-websocket.jar" value="${tomcat.embed}/tomcat-embed-websocket.jar"/>
-  <property name="tomcat-embed-juli.jar" value="${tomcat.embed}/tomcat-embed-logging-juli.jar"/>
 
   <property name="tomcat-embed-core-sources.jar" value="${tomcat.embed.sources}/tomcat-embed-core-src.jar"/>
   <property name="tomcat-embed-jasper-sources.jar" value="${tomcat.embed.sources}/tomcat-embed-jasper-src.jar"/>
   <property name="tomcat-embed-el-sources.jar" value="${tomcat.embed.sources}/tomcat-embed-el-src.jar"/>
   <property name="tomcat-embed-websocket-sources.jar" value="${tomcat.embed.sources}/tomcat-embed-websocket-src.jar"/>
-  <property name="tomcat-embed-juli-sources.jar" value="${tomcat.embed.sources}/tomcat-embed-logging-juli-src.jar"/>
-  <property name="tomcat-embed-dbcp-sources.jar" value="${tomcat.embed.sources}/tomcat-dbcp-src.jar"/>
 
   <!-- Extras JARs & source JARs -->
-  <property name="tomcat-juli-extras.jar" value="${tomcat.extras}/tomcat-juli.jar"/>
-  <property name="tomcat-juli-adapters.jar" value="${tomcat.extras}/tomcat-juli-adapters.jar"/>
   <property name="catalina-ws.jar" value="${tomcat.extras}/catalina-ws.jar"/>
   <property name="catalina-jmx-remote.jar" value="${tomcat.extras}/catalina-jmx-remote.jar"/>
-  <property name="tomcat-embed-log4j.jar" value="${tomcat.embed}/tomcat-embed-logging-log4j.jar"/>
 
-  <property name="tomcat-juli-extras-src.jar" value="${tomcat.extras.sources}/tomcat-juli-src.jar"/>
-  <property name="tomcat-juli-adapters-src.jar" value="${tomcat.extras.sources}/tomcat-juli-adapters-src.jar"/>
   <property name="catalina-ws-src.jar" value="${tomcat.extras.sources}/catalina-ws-src.jar"/>
   <property name="catalina-jmx-remote-src.jar" value="${tomcat.extras.sources}/catalina-jmx-remote-src.jar"/>
-  <property name="tomcat-embed-log4j-src.jar" value="${tomcat.embed.sources}/tomcat-embed-logging-log4j-src.jar"/>
 
   <!-- jdbc-pool JARs & source JARs -->
   <property name="tomcat-jdbc.jar" value="${tomcat.pool}/tomcat-jdbc.jar"/>
@@ -176,16 +171,18 @@
   <property name="tomcat.classes.cobertura" value="${tomcat.classes}-cobertura"/>
   <property name="cobertura.report.format" value="html"/>
 
+  <!-- FindBugs settings -->
+  <property name="findbugs.out" value="${tomcat.output}/findbugs"/>
+  <property name="findbugs.report.format" value="html"/>
+  <property name="findbugs.report.level" value="low"/>
+
   <!-- Workaround against http://bugs.sun.com/view_bug.do?bug_id=6202721 -->
   <available file="/dev/urandom" property="test.jvmarg.egd" value="-Djava.security.egd=file:/dev/./urandom"/>
   <property name="test.jvmarg.egd" value="" />
 
   <!-- Location of OpenSSL binary (file name, not directory) -->
+  <!-- The OpenSSL tests cases be disabled by specifying an invalid path here -->
   <property name="test.openssl.path" value="" />
-
-  <!-- Accepted version of OpenSSL. The output of "openssl version"
-       must start with "OpenSSL " plus value of this property. -->
-  <property name="test.openssl.version" value="1.1.0" />
 
   <!-- Include .gitignore in src distributions. -->
   <!-- .git and .gitignore are in defaultexcludes since Ant 1.8.2 -->
@@ -194,20 +191,23 @@
   <defaultexcludes remove="**/.gitignore" />
   <!--<defaultexcludes echo="true" />-->
 
-  <available file="${npn.jar}" property="npn.exists" />
+  <!-- Java 9 -->
+  <available classname="java.lang.reflect.InaccessibleObjectException"
+             property="java9.add.modules"
+             value="--add-modules java.xml.ws"/>
+  <property name="java9.add.modules" value=""/>
 
   <!-- Classpaths -->
   <path id="compile.classpath">
     <pathelement location="${jdt.jar}"/>
-    <pathelement location="${npn.jar}"/>
   </path>
 
   <path id="tomcat.classpath">
-    <pathelement location="${tomcat.classes}"/>
+    <pathelement path="${test.run.classes}"/>
   </path>
 
   <path id="tomcat.test.classpath">
-    <pathelement location="${tomcat.build}/webapps/examples/WEB-INF/classes"/>
+    <pathelement location="${test.basedir}/webapps/examples/WEB-INF/classes"/>
     <pathelement location="${test.classes}"/>
     <pathelement location="${junit.jar}"/>
     <pathelement location="${hamcrest.jar}"/>
@@ -269,6 +269,7 @@
     <include name="**/*.launch"/>
     <include name="**/*.license"/>
     <include name="**/*.manifest"/>
+    <include name="**/*.md"/>
     <include name="**/*.mdl"/>
     <include name="**/*.MF"/>
     <include name="**/*.notice"/>
@@ -290,6 +291,10 @@
     <include name="**/*.xml"/>
     <include name="**/*.xsd"/>
     <include name="**/*.xsl"/>
+    <!-- Exclude files that use 16-bit encodings. -->
+    <!-- This prevents fixcrlf corrupting them during a release -->
+    <exclude name="**/bom-none-prolog-utf16?e.jspx"/>
+    <exclude name="**/bom-utf16?e-prolog-*.jsp*"/>
   </patternset>
 
 
@@ -297,9 +302,6 @@
   <!-- Pattern sets for jar files in standard distributions -->
   <patternset id="files.annotations-api">
     <include name="javax/annotation/**" />
-    <include name="javax/ejb/**" />
-    <include name="javax/persistence/**" />
-    <include name="javax/xml/ws/**" />
   </patternset>
 
   <patternset id="files.servlet-api">
@@ -323,19 +325,31 @@
     <include name="javax/websocket/**" />
   </patternset>
 
+  <patternset id="files.jaspic-api">
+    <include name="javax/security/auth/message/**" />
+  </patternset>
+
   <patternset id="files.tomcat-websocket">
     <include name="org/apache/tomcat/websocket/**" />
   </patternset>
 
+  <!-- This duplicates some classes in files.catalina                        -->
+  <!-- Duplicating a few classes in bootstrap.jar is simpler than excluding  -->
+  <!-- them from files.catalina and having to manually add them to           -->
+  <!-- files.tomcat-embed-core because of an include/exclude conflict        -->
+  <!-- between files.catalina and files.bootstrap.                           -->
   <patternset id="files.bootstrap">
     <include name="org/apache/catalina/startup/Bootstrap.*" />
     <include name="org/apache/catalina/startup/catalina.properties" />
     <include name="org/apache/catalina/startup/CatalinaProperties.*" />
     <include name="org/apache/catalina/startup/ClassLoaderFactory.*" />
     <include name="org/apache/catalina/startup/ClassLoaderFactory$*.*" />
+    <include name="org/apache/catalina/startup/SafeForkJoinWorkerThreadFactory.*" />
+    <include name="org/apache/catalina/startup/SafeForkJoinWorkerThreadFactory$*.*" />
     <include name="org/apache/catalina/startup/Tool.*" />
     <include name="org/apache/catalina/security/SecurityClassLoad.*" />
-    <include name="org/apache/naming/JndiPermission.*" />
+    <include name="org/apache/catalina/webresources/war/**" />
+    <include name="org/apache/tomcat/util/buf/UriUtil.*" />
   </patternset>
 
   <patternset id="files.tomcat-juli">
@@ -347,7 +361,6 @@
     <exclude name="org/apache/tomcat/buildutil" />
     <exclude name="org/apache/tomcat/dbcp" />
     <exclude name="org/apache/tomcat/jni" />
-    <exclude name="org/apache/tomcat/spdy" />
     <exclude name="org/apache/tomcat/util" />
     <exclude name="org/apache/tomcat/websocket" />
   </patternset>
@@ -355,13 +368,14 @@
   <patternset id="files.tomcat-util">
     <include name="org/apache/tomcat/util/buf/**" />
     <include name="org/apache/tomcat/util/codec/**" />
+    <include name="org/apache/tomcat/util/collections/**" />
+    <include name="org/apache/tomcat/util/compat/**" />
     <include name="org/apache/tomcat/util/file/**" />
     <include name="org/apache/tomcat/util/res/**" />
     <include name="org/apache/tomcat/util/security/**" />
     <include name="org/apache/tomcat/util/threads/**" />
     <include name="org/apache/tomcat/util/*" />
     <exclude name="org/apache/tomcat/util/bcel" />
-    <exclude name="org/apache/tomcat/util/collections" />
     <exclude name="org/apache/tomcat/util/descriptor" />
     <exclude name="org/apache/tomcat/util/digester" />
     <exclude name="org/apache/tomcat/util/http" />
@@ -374,7 +388,6 @@
   <patternset id="files.tomcat-util-scan">
     <include name="org/apache/tomcat/util/descriptor/**" />
     <include name="org/apache/tomcat/util/digester/**" />
-    <include name="org/apache/tomcat/util/file/**" />
     <include name="org/apache/tomcat/util/scan/**" />
   </patternset>
 
@@ -412,20 +425,12 @@
 
   <patternset id="files.tomcat-coyote">
     <include name="org/apache/coyote/**" />
-    <!-- Included in tomcat-spdy -->
-    <exclude name="org/apache/coyote/spdy/**" />
     <!-- Remaining tomcat-util packages -->
     <include name="org/apache/tomcat/util/bcel/**" />
-    <include name="org/apache/tomcat/util/collections/**" />
     <include name="org/apache/tomcat/util/http/**" />
     <include name="org/apache/tomcat/util/log/**" />
     <include name="org/apache/tomcat/util/modeler/**" />
     <include name="org/apache/tomcat/util/net/**" />
-  </patternset>
-
-  <patternset id="files.tomcat-spdy">
-    <include name="org/apache/coyote/spdy/**" />
-    <include name="org/apache/tomcat/spdy/**" />
   </patternset>
 
   <patternset id="files.jasper">
@@ -443,11 +448,11 @@
   <!-- Pattern sets for embedded JARs -->
   <!-- Every standard pattern set above should be included in an embedded JAR -->
   <patternset id="files.tomcat-embed-core" >
-    <patternset refid="files.annotations-api" />
-    <patternset refid="files.bootstrap" />
     <patternset refid="files.catalina" />
     <patternset refid="files.servlet-api" />
+    <patternset refid="files.jaspic-api" />
     <patternset refid="files.tomcat-api" />
+    <patternset refid="files.tomcat-juli" />
     <!-- These pattern sets conflict so include files directly
       <patternset refid="files.tomcat-coyote" />
       <patternset refid="files.tomcat-util" />
@@ -457,7 +462,6 @@
     <include name="org/apache/tomcat/jni/**" />
     <include name="org/apache/jk/**" />
     <include name="org/apache/tomcat/util/**" />
-
   </patternset>
 
   <patternset id="files.tomcat-embed-jasper" >
@@ -475,15 +479,15 @@
     <patternset refid="files.tomcat-websocket" />
   </patternset>
 
-  <!-- Pattern sets used directly -->
-    <!--<patternset refid="files.tomcat-juli" />-->
-
   <!-- Pattern sets not included in embedded -->
     <!-- Cluster support not included in embedded -->
     <!--<patternset refid="files.catalina-tribes" />-->
     <!--<patternset refid="files.catalina-ha" />-->
     <!-- Ant tasks not included in embedded -->
     <!--<patternset refid="files.catalina-ant" />-->
+    <!-- Annotations API is a separate dependency to avoid JRE 9 issues -->
+    <!-- See BZ 61439 -->
+    <!--<patternset refid="files.annotations-api" />-->
 
   <!-- Pattern sets for extras JARs -->
   <patternset id="files.tomcat-extras-ws">
@@ -492,15 +496,6 @@
 
   <patternset id="files.tomcat-extras-jmxremote">
     <include name="org/apache/catalina/mbeans/JmxRemote*" />
-  </patternset>
-
-  <patternset id="files.tomcat-extras-juli-adapters">
-    <include name="org/apache/juli/logging/impl/**" />
-    <exclude name="org/apache/juli/logging/impl/WeakHashtable*" />
-    <exclude name="org/apache/juli/logging/impl/LogFactoryImpl" />
-    <!-- Javadoc and i18n exclusions -->
-    <exclude name="**/package.html" />
-    <exclude name="**/LocalStrings_*" />
   </patternset>
 
   <!-- =========================== Build targets =========================== -->
@@ -544,8 +539,12 @@
     description="Uses Checkstyle tool to perform style check for the source code">
     <!-- Required so we can cache checkstyle results -->
     <mkdir dir="${tomcat.output}/res/checkstyle"/>
+    <available property="checkstyletask.properties" resource="checkstyletask.properties"
+       classpath="${checkstyle.jar}" value="checkstyletask.properties"/>
+    <available property="checkstyletask.properties" resource="com/puppycrawl/tools/checkstyle/ant/checkstyle-ant-task.properties"
+       classpath="${checkstyle.jar}" value="com/puppycrawl/tools/checkstyle/ant/checkstyle-ant-task.properties"/>
 
-    <taskdef resource="checkstyletask.properties"
+    <taskdef resource="${checkstyletask.properties}"
              classpath="${checkstyle.jar}" />
     <checkstyle config="res/checkstyle/checkstyle.xml">
       <fileset dir="." >
@@ -558,6 +557,8 @@
         <exclude name="output/**"/>
         <exclude name="modules/**"/>
         <exclude name="**/*.mdl"/>
+        <exclude name="**/*.pem"/>
+        <exclude name="**/*.svg"/>
         <exclude name="**/*_2.xml"/>
         <exclude name="res/checkstyle/header-al2.txt"/>
         <!-- Exclude auto-generated files -->
@@ -569,12 +570,19 @@
         <exclude name="java/org/apache/**/parser/Token*.java" />
         <!-- Exclude simple test files -->
         <exclude name="test/webapp/bug53257/**/*.txt"/>
+        <exclude name="test/webapp/bug49nnn/bug49464*"/>
         <exclude name="test/webapp-fragments/WEB-INF/classes/*.txt"/>
         <exclude name="test/webresources/**"/>
+        <!-- Exclude test files with unusual encodings -->
+        <exclude name="test/webapp/jsp/encoding/**"/>
+        <!-- Exclude developer specific local files -->
+        <exclude name="build.properties" />
+        <exclude name="res/maven/mvn.properties" />
       </fileset>
       <fileset dir="modules/jdbc-pool" >
         <exclude name=".*/**"/>
         <exclude name="**/MANIFEST.MF"/>
+        <exclude name="build.properties" />
         <patternset refid="text.files" />
       </fileset>
     </checkstyle>
@@ -625,6 +633,10 @@
         <exclude name="nbproject/**"/>
         <exclude name="output/**"/>
         <exclude name="modules/**"/>
+        <!-- Exclude these since some svn clients do not seem able to handle
+             UTF-16 line-ending conversion -->
+        <exclude name="test/webapp/jsp/encoding/bom-utf16*"/>
+        <exclude name="test/webapp/jsp/encoding/bom-none-prolog-utf16*"/>
       </fileset>
       <fileset dir="modules/jdbc-pool" >
         <patternset refid="text.files" />
@@ -661,10 +673,7 @@
       <compilerarg value="-Xlint:unchecked"/>
       -->
       <classpath refid="compile.classpath" />
-        <exclude name="org/apache/naming/factory/webservices/**" />
-        <exclude name="org/apache/tomcat/spdy/NetSupportJava7*" unless="npn.exists"/>
-        <exclude name="org/apache/coyote/spdy/*Nio*" unless="npn.exists"/>
-        <exclude name="org/apache/coyote/spdy/SpdyNpnHandler*" unless="npn.exists"/>
+      <exclude name="org/apache/naming/factory/webservices/**" />
     </javac>
     <!-- Copy static resource files -->
     <copy todir="${tomcat.classes}" encoding="ISO-8859-1">
@@ -691,6 +700,7 @@
     <filter token="jsp.revision" value="${jsp.revision}"/>
     <filter token="el.revision" value="${el.revision}"/>
     <filter token="websocket.revision" value="${websocket.revision}"/>
+    <filter token="jaspic.revision" value="${jaspic.revision}"/>
 
     <mkdir dir="${tomcat.manifests}" />
     <copy todir="${tomcat.manifests}" overwrite="yes" filtering="yes"
@@ -708,7 +718,7 @@
       filesId="files.annotations-api"
       manifest="${tomcat.manifests}/annotations-api.jar.manifest" />
 
-    <!-- Servlet 3.1 Implementation JAR File -->
+    <!-- Servlet 4.0 Implementation JAR File -->
     <jarIt jarfile="${servlet-api.jar}"
       filesDir="${tomcat.classes}"
       filesId="files.servlet-api"
@@ -733,6 +743,12 @@
       filesDir="${tomcat.classes}"
       filesId="files.websocket-api"
       manifest="${tomcat.manifests}/websocket-api.jar.manifest" />
+
+    <!-- JASPIC 1.1 API JAR File -->
+    <jarIt jarfile="${jaspic-api.jar}"
+      filesDir="${tomcat.classes}"
+      filesId="files.jaspic-api"
+      manifest="${tomcat.manifests}/jaspic-api.jar.manifest" />
 
     <!-- WebSocket 1.1 implementation JAR File -->
     <jarIt jarfile="${tomcat-websocket.jar}"
@@ -795,10 +811,6 @@
     <jarIt jarfile="${tomcat-coyote.jar}"
       filesDir="${tomcat.classes}"
       filesId="files.tomcat-coyote" />
-
-    <jarIt jarfile="${tomcat-spdy.jar}"
-      filesDir="${tomcat.classes}"
-      filesId="files.tomcat-spdy" />
 
     <jarIt jarfile="${tomcat-jni.jar}"
       filesDir="${tomcat.classes}"
@@ -884,6 +896,8 @@
     <copy tofile="${tomcat.build}/webapps/docs/RELEASE-NOTES.txt" file="RELEASE-NOTES" encoding="ISO-8859-1">
       <filterset refid="version.filters"/>
     </copy>
+    <copy tofile="${tomcat.build}/webapps/docs/mbeans-descriptors.dtd"
+            file="java/org/apache/tomcat/util/modeler/mbeans-descriptors.dtd" />
 
     <copy   tofile="${tomcat.build}/webapps/docs/appdev/sample/build.xml"
               file="webapps/docs/appdev/build.xml.txt"/>
@@ -998,11 +1012,6 @@
 
   <target name="deploy" depends="package,build-docs,build-tomcat-jdbc,compile-webapp-examples"
           description="Default. Builds a working Tomcat instance">
-
-    <copy tofile="${tomcat.build}/bin/tomcat-native.tar.gz"
-            file="${tomcat-native.tar.gz}" />
-    <copy tofile="${tomcat.build}/bin/commons-daemon-native.tar.gz"
-            file="${commons-daemon.native.src.tgz}" />
 
     <copy tofile="${tomcat.build}/bin/commons-daemon.jar" file="${commons-daemon.jar}" />
 
@@ -1221,6 +1230,7 @@
     <copy file="${tomcat-dbcp.jar}" todir="${tomcat.embed}"
       failonerror="false"/>
     <copy file="${jdt.jar}" todir="${tomcat.embed}" />
+    <copy file="${annotations-api.jar}" todir="${tomcat.embed}" />
 
     <!-- Note the meta-inf below will work as long as there is only one JAR
          that needs to add entries. If there is more than one a more complex
@@ -1241,9 +1251,6 @@
            filesDir="${tomcat.classes}"
            filesId="files.tomcat-embed-websocket"
            meta-inf="${tomcat.manifests}/tomcat-websocket.jar"/>
-    <jarIt jarfile="${tomcat-embed-juli.jar}"
-           filesDir="${tomcat.classes}"
-           filesId="files.tomcat-juli"/>
 
   </target>
 
@@ -1267,9 +1274,6 @@
     <jarIt jarfile="${tomcat-embed-websocket-sources.jar}"
            filesDir="java"
            filesId="files.tomcat-embed-websocket"/>
-    <jarIt jarfile="${tomcat-embed-juli-sources.jar}"
-           filesDir="java"
-           filesId="files.tomcat-juli"/>
 
     <copy file="${tomcat-dbcp-src.jar}" todir="${tomcat.embed.sources}" />
 
@@ -1279,7 +1283,7 @@
 
   <target name="embed"
           description="Creates the experimental embedded release"
-          depends="embed-jars,embed-sources,embed-extras" >
+          depends="embed-jars,embed-sources" >
 
     <fixcrlf srcdir="${tomcat.embed}" eol="crlf"
         encoding="ISO-8859-1" fixlast="false" >
@@ -1291,6 +1295,7 @@
         <exclude name="*.asc" />
         <exclude name="*.md5" />
         <exclude name="*.sha1" />
+        <exclude name="*.sha512" />
         <exclude name="*.zip" />
         <exclude name="*.tar.gz" />
       </fileset>
@@ -1308,6 +1313,7 @@
         <exclude name="*.asc" />
         <exclude name="*.md5" />
         <exclude name="*.sha1" />
+        <exclude name="*.sha512" />
         <exclude name="*.zip" />
         <exclude name="*.tar.gz" />
       </tarfileset>
@@ -1335,6 +1341,7 @@
         <fileset dir="test">
           <include name="META-INF/**"/>
           <include name="**/service-config.txt"/>
+          <include name="**/logging-non-rotatable.properties"/>
         </fileset>
     </copy>
   </target>
@@ -1429,12 +1436,14 @@
 
     <sequential>
       <mkdir dir="${test.reports}" />
-      <junit printsummary="yes" fork="yes" dir="." showoutput="yes"
+      <junit printsummary="yes" fork="yes" dir="." showoutput="${test.verbose}"
         errorproperty="test.result.error"
         failureproperty="test.result.failure"
-        haltonfailure="${test.haltonfailure}" >
+        haltonfailure="${test.haltonfailure}"
+        threads="${test.threads}">
 
         <jvmarg value="${test.jvmarg.egd}"/>
+        <jvmarg value="-Dfile.encoding=UTF-8"/>
         <jvmarg value="-Djava.library.path=${test.apr.loc}"/>
         <jvmarg value="${test.formatter}"/>
         <jvmarg value="-Djava.net.preferIPv4Stack=${java.net.preferIPv4Stack}"/>
@@ -1443,13 +1452,14 @@
         <classpath refid="tomcat.test.run.classpath" />
 
         <sysproperty key="tomcat.test.temp" value="${test.temp}" />
+        <sysproperty key="tomcat.test.basedir" value="${test.basedir}" />
         <sysproperty key="tomcat.test.tomcatbuild" value="${tomcat.build}" />
         <sysproperty key="tomcat.test.protocol" value="@{protocol}" />
         <sysproperty key="tomcat.test.accesslog" value="${test.accesslog}" />
         <sysproperty key="tomcat.test.reports" value="${test.reports}" />
         <sysproperty key="tomcat.test.openssl.path" value="${test.openssl.path}" />
-        <sysproperty key="tomcat.test.openssl.version" value="${test.openssl.version}" />
         <sysproperty key="tomcat.test.relaxTiming" value="${test.relaxTiming}" />
+        <sysproperty key="tomcat.test.sslImplementation" value="${test.sslImplementation}" />
         <!-- File for Cobertura to write coverage results to -->
         <sysproperty key="net.sourceforge.cobertura.datafile" file="${cobertura.datafile}" />
 
@@ -1465,32 +1475,57 @@
               if="test.entry.methods"
            />
         <batchtest todir="${test.reports}" unless="test.entry">
-          <fileset dir="test" >
-            <!-- Include all by default -->
-            <include name="${test.name}" />
+          <!-- Include all by default -->
+          <fileset dir="test" includes="${test.name}">
             <!-- Exclude helper classes -->
             <exclude name="**/Tester*.java" />
             <!-- Exclude the tests known to fail -->
             <exclude name="org/apache/catalina/tribes/test/**" />
             <!-- Exclude the OpenSSL tests unless OpenSSL is available -->
-            <exclude name="org/apache/tomcat/util/net/jsse/openssl/**" unless="${test.openssl.exists}" />
+            <exclude name="org/apache/tomcat/util/net/openssl/ciphers/**" unless="${test.openssl.exists}" />
             <!-- Exclude performance tests. E.g. on systems with slow/inconsistent timing -->
             <exclude name="**/*Performance.java" if="${test.excludePerformance}" />
+            <!-- Exclude a configurable list of tests -->
+            <exclude name="${test.exclude}" />
           </fileset>
         </batchtest>
       </junit>
     </sequential>
   </macrodef>
 
-  <target name="cobertura-disabled" unless="${test.cobertura}">
+  <target name="cobertura-init">
+    <condition property="cobertura.enabled" value="true">
+      <and>
+        <istrue value="${test.cobertura}"/>
+        <equals arg1="1" arg2="${test.threads}"/>
+      </and>
+    </condition>
+    <condition property="cobertura.disabled" value="true">
+        <and>
+          <istrue value="${test.cobertura}"/>
+          <not>
+            <equals arg1="1" arg2="${test.threads}"/>
+          </not>
+        </and>
+    </condition>
+  </target>
+
+  <target name="cobertura-disabled" unless="${cobertura.enabled}"
+          depends="cobertura-init">
     <!-- Define classpath used to run tests when Cobertura is turned off. -->
     <path id="tomcat.test.run.classpath">
       <path refid="tomcat.test.classpath" />
     </path>
   </target>
 
-  <target name="cobertura-instrument" depends="compile,download-cobertura,cobertura-disabled"
-          if="${test.cobertura}"
+  <target name="cobertura-disabled-log" if="${cobertura.disabled}"
+          depends="cobertura-init">
+    <echo message="Code coverage disabled because test.threads is greater than 1"/>
+  </target>
+
+  <target name="cobertura-instrument"
+          depends="compile,download-cobertura,cobertura-disabled,cobertura-disabled-log"
+          if="${cobertura.enabled}"
           description="Adds Cobertura instrumentation to the compiled bytecode">
 
     <path id="cobertura.classpath">
@@ -1518,8 +1553,6 @@
         <exclude name="**/OneLineFormatter*.class"/>
         <exclude name="**/DateFormatCache.class"/>
         <exclude name="**/DateFormatCache*.class"/>
-        <!-- This class cannot be instrumented when tcnative library is not in java.library.path -->
-        <exclude name="**/jni/socket/AprSocket.class"/>
       </fileset>
       <auxClasspath path="${jdt.jar}" />
     </cobertura-instrument>
@@ -1533,7 +1566,7 @@
     </path>
   </target>
 
-  <target name="cobertura-report" if="${test.cobertura}"
+  <target name="cobertura-report" if="${cobertura.enabled}"
           depends="test-nio,test-nio2,test-apr"
           description="Creates report from gathered Cobertura results">
 
@@ -1542,152 +1575,39 @@
                       format="${cobertura.report.format}"/>
   </target>
 
+  <target name="findbugs"
+          if="${execute.findbugs}"
+          depends="compile,download-findbugs">
+
+    <path id="findbugs.classpath">
+      <fileset file="${findbugs.jar}" />
+    </path>
+
+    <taskdef classpathref="findbugs.classpath" name="findbugs" classname="edu.umd.cs.findbugs.anttask.FindBugsTask"/>
+
+    <mkdir dir="${findbugs.out}" />
+
+    <findbugs home="${findbugs.home}"
+              output="${findbugs.report.format}"
+              outputFile="${findbugs.out}/findbugs-report.${findbugs.report.format}"
+              reportLevel="${findbugs.report.level}"
+              excludeFilter="res/findbugs/filter-false-positives.xml" >
+      <sourcePath path="${basedir}/java" />
+      <class location="${tomcat.classes}" />
+      <class location="${test.classes}" />
+      <auxClasspath>
+        <fileset file="${jdt.jar}" />
+        <fileset file="${ant.core.lib}" />
+      </auxClasspath>
+    </findbugs>
+  </target>
+
   <target name="extras-prepare" >
     <mkdir dir="${tomcat.extras}"/>
     <mkdir dir="${tomcat.extras.sources}"/>
     <mkdir dir="${tomcat.embed}"/>
     <mkdir dir="${tomcat.embed.sources}"/>
-    <mkdir dir="${tomcat.extras}/logging"/>
     <mkdir dir="${tomcat.extras}/webservices"/>
-  </target>
-
-  <target name="extras-commons-logging-prepare"
-          depends="extras-prepare"
-          description="Prepare to build web services extras package">
-
-    <antcall target="downloadfile-2">
-      <param name="sourcefile.1" value="${commons-logging-src.loc.1}"/>
-      <param name="sourcefile.2" value="${commons-logging-src.loc.2}"/>
-      <param name="destfile" value="${commons-logging-src.tar.gz}"/>
-      <param name="destdir" value="${commons-logging.home}"/>
-    </antcall>
-
-    <antcall target="downloadfile">
-      <param name="sourcefile" value="${avalon-framework.loc}"/>
-      <param name="destfile" value="${avalon-framework.jar}"/>
-      <param name="destdir" value="${avalon-framework.home}"/>
-    </antcall>
-
-    <antcall target="downloadfile">
-      <param name="sourcefile" value="${log4j.loc}"/>
-      <param name="destfile" value="${log4j.jar}"/>
-      <param name="destdir" value="${log4j.home}"/>
-    </antcall>
-
-    <antcall target="downloadfile">
-      <param name="sourcefile" value="${logkit.loc}"/>
-      <param name="destfile" value="${logkit.jar}"/>
-      <param name="destdir" value="${logkit.home}"/>
-    </antcall>
-
-    <antcall target="downloadfile">
-      <param name="sourcefile" value="${servletapi.loc}"/>
-      <param name="destfile" value="${servletapi.jar}"/>
-      <param name="destdir" value="${servletapi.home}"/>
-    </antcall>
-
-  </target>
-
-  <target name="extras-commons-logging"
-          depends="extras-commons-logging-prepare,compile,build-manifests"
-          description="Build JULI for log4j extras package">
-
-    <gunzip src="${commons-logging-src.tar.gz}"
-      dest="${tomcat.extras}/logging/commons-logging-src.tar"/>
-    <untar src="${tomcat.extras}/logging/commons-logging-src.tar"
-      dest="${tomcat.extras}/logging/"/>
-
-    <replace dir="${tomcat.extras}/logging/commons-logging-${commons-logging.version}-src/src/main/java/org/apache/commons"
-        encoding="ISO-8859-1">
-      <replacefilter token="org.apache.commons"
-            value="org.apache.juli" />
-    </replace>
-    <mkdir dir="${tomcat.extras}/logging/commons-logging-${commons-logging.version}-src/src/main/java/org/apache/juli" />
-    <move todir="${tomcat.extras}/logging/commons-logging-${commons-logging.version}-src/src/main/java/org/apache/juli">
-      <fileset dir="${tomcat.extras}/logging/commons-logging-${commons-logging.version}-src/src/main/java/org/apache/commons" />
-    </move>
-
-    <replace dir="${tomcat.extras}/logging/commons-logging-${commons-logging.version}-src"
-      encoding="ISO-8859-1">
-      <replacefilter token="org.apache.commons"
-        value="org.apache.juli" />
-      <replacefilter token="org/apache/commons/"
-        value="org/apache/juli/" />
-    </replace>
-    <copy tofile="${tomcat.extras}/logging/commons-logging-${commons-logging.version}-src/build2.xml"
-      file="${tomcat.extras}/logging/commons-logging-${commons-logging.version}-src/build.xml" />
-
-    <copy todir="${tomcat.extras}/logging/commons-logging-${commons-logging.version}-src">
-      <fileset file="${avalon-framework.jar}" />
-      <fileset file="${log4j.jar}" />
-      <fileset file="${logkit.jar}" />
-      <fileset file="${servletapi.jar}" />
-    </copy>
-
-    <ant antfile="${tomcat.extras}/logging/commons-logging-${commons-logging.version}-src/build2.xml"
-         dir="${tomcat.extras}/logging/commons-logging-${commons-logging.version}-src"
-         inheritAll="false" target="compile" />
-
-    <jar jarfile="${tomcat-juli-extras.jar}"
-         manifest="${tomcat.manifests}/default.manifest">
-      <fileset dir="${tomcat.extras}/logging/commons-logging-${commons-logging.version}-src/target/classes">
-        <include name="org/apache/juli/logging/*" />
-        <include name="org/apache/juli/logging/impl/LogFactoryImpl*.class" />
-        <include name="org/apache/juli/logging/impl/WeakHashtable*.class" />
-        <include name="org/apache/juli/logging/impl/SimpleLog*.class" />
-        <include name="org/apache/juli/logging/impl/NoOpLog*.class" />
-        <include name="org/apache/juli/logging/impl/Jdk14Logger.class" />
-        <!-- Javadoc and i18n exclusions -->
-        <exclude name="**/package.html" />
-        <exclude name="**/LocalStrings_*" />
-      </fileset>
-      <fileset dir="${tomcat.classes}">
-        <include name="org/apache/juli/*" />
-        <!-- Javadoc and i18n exclusions -->
-        <exclude name="**/package.html" />
-        <exclude name="**/LocalStrings_*" />
-      </fileset>
-      <zipfileset file="${tomcat.manifests}/default.notice"
-        fullpath="META-INF/NOTICE" />
-      <zipfileset file="${tomcat.manifests}/default.license"
-        fullpath="META-INF/LICENSE" />
-    </jar>
-    <hashAndSign file="${tomcat-juli-extras.jar}" />
-
-    <jarIt jarfile="${tomcat-juli-adapters.jar}"
-      filesDir="${tomcat.extras}/logging/commons-logging-${commons-logging.version}-src/target/classes"
-      filesId="files.tomcat-extras-juli-adapters" />
-    <hashAndSign file="${tomcat-juli-adapters.jar}" />
-
-    <!-- Source JARs -->
-    <jar jarfile="${tomcat-juli-extras-src.jar}"
-         manifest="${tomcat.manifests}/default.manifest">
-      <fileset dir="${tomcat.extras}/logging/commons-logging-${commons-logging.version}-src/src/main/java">
-        <include name="org/apache/juli/logging/*.java" />
-        <include name="org/apache/juli/logging/impl/LogFactoryImpl*.java" />
-        <include name="org/apache/juli/logging/impl/WeakHashtable*.java" />
-        <include name="org/apache/juli/logging/impl/SimpleLog*.java" />
-        <include name="org/apache/juli/logging/impl/NoOpLog*.java" />
-        <include name="org/apache/juli/logging/impl/Jdk14Logger.java" />
-        <!-- Javadoc and i18n exclusions -->
-        <exclude name="**/package.html" />
-        <exclude name="**/LocalStrings_*" />
-      </fileset>
-      <fileset dir="java">
-        <include name="org/apache/juli/*" />
-        <!-- Javadoc and i18n exclusions -->
-        <exclude name="**/package.html" />
-        <exclude name="**/LocalStrings_*" />
-      </fileset>
-      <zipfileset file="${tomcat.manifests}/default.notice"
-        fullpath="META-INF/NOTICE" />
-      <zipfileset file="${tomcat.manifests}/default.license"
-        fullpath="META-INF/LICENSE" />
-    </jar>
-    <jarIt jarfile="${tomcat-juli-adapters-src.jar}"
-      filesDir="${tomcat.extras}/logging/commons-logging-${commons-logging.version}-src/src/main/java"
-      filesId="files.tomcat-extras-juli-adapters" />
-
   </target>
 
   <target name="extras-webservices-prepare"
@@ -1756,55 +1676,8 @@
   </target>
 
   <target name="extras"
-          depends="extras-commons-logging,extras-webservices,extras-jmx-remote"
+          depends="extras-webservices,extras-jmx-remote"
           description="Build all extras packages">
-  </target>
-
-  <target name="embed-extras" depends="extras"
-          description="Embedded packaging for those extras that can use it">
-
-    <jar jarfile="${tomcat-embed-log4j.jar}"
-         manifest="${tomcat.manifests}/default.manifest">
-      <fileset dir="${tomcat.extras}/logging/commons-logging-${commons-logging.version}-src/target/classes">
-        <include name="org/apache/juli/logging/*" />
-        <include name="org/apache/juli/logging/impl/*" />
-        <!-- Javadoc and i18n exclusions -->
-        <exclude name="**/package.html" />
-        <exclude name="**/LocalStrings_*" />
-      </fileset>
-      <fileset dir="${tomcat.classes}">
-        <include name="org/apache/juli/*" />
-        <!-- Javadoc and i18n exclusions -->
-        <exclude name="**/package.html" />
-        <exclude name="**/LocalStrings_*" />
-      </fileset>
-      <zipfileset file="${tomcat.manifests}/default.notice"
-        fullpath="META-INF/NOTICE" />
-      <zipfileset file="${tomcat.manifests}/default.license"
-        fullpath="META-INF/LICENSE" />
-    </jar>
-
-    <jar jarfile="${tomcat-embed-log4j-src.jar}"
-         manifest="${tomcat.manifests}/default.manifest">
-      <fileset dir="${tomcat.extras}/logging/commons-logging-${commons-logging.version}-src/src/main/java">
-        <include name="org/apache/juli/logging/*.java" />
-        <include name="org/apache/juli/logging/impl/*.java" />
-        <!-- Javadoc and i18n exclusions -->
-        <exclude name="**/package.html" />
-        <exclude name="**/LocalStrings_*" />
-      </fileset>
-      <fileset dir="java">
-        <include name="org/apache/juli/*" />
-        <!-- Javadoc and i18n exclusions -->
-        <exclude name="**/package.html" />
-        <exclude name="**/LocalStrings_*" />
-      </fileset>
-      <zipfileset file="${tomcat.manifests}/default.notice"
-        fullpath="META-INF/NOTICE" />
-      <zipfileset file="${tomcat.manifests}/default.license"
-        fullpath="META-INF/LICENSE" />
-    </jar>
-
   </target>
 
   <target name="dist-prepare" depends="download-dist">
@@ -1870,9 +1743,6 @@
     <!-- 64 bit amd -->
     <copy file="${commons-daemon.home}/windows/amd64/prunsrv.exe"
         tofile="${tomcat.dist}/bin/x64/tomcat${version.major}.exe" />
-    <!-- 64 bit ia -->
-    <copy file="${commons-daemon.home}/windows/ia64/prunsrv.exe"
-        tofile="${tomcat.dist}/bin/i64/tomcat${version.major}.exe" />
     <!-- tc native -->
     <copy todir="${tomcat.dist}/bin">
       <fileset dir="${tomcat-native.home}/bin">
@@ -1881,10 +1751,13 @@
       </fileset>
     </copy>
 
+    <!-- Source bundles for native components -->
+    <copy tofile="${tomcat.dist}/bin/tomcat-native.tar.gz"
+            file="${tomcat-native.tar.gz}" />
+    <copy tofile="${tomcat.dist}/bin/commons-daemon-native.tar.gz"
+            file="${commons-daemon.native.src.tgz}" />
+
     <!-- platform README files -->
-    <echo append="false" file="${tomcat.dist}/bin/i64/README">
-Apache Tomcat ${version} native binaries for Win64 IA64 platform.
-    </echo>
     <echo append="false" file="${tomcat.dist}/bin/x64/README">
 Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
     </echo>
@@ -1898,15 +1771,17 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
       sourcepath="${tomcat.dist}/src/java"
       destdir="${tomcat.dist}/webapps/docs/servletapi"
       version="true"
-      windowtitle="Servlet 3.1 API Documentation - Apache Tomcat ${version}"
-      doctitle="Servlet 3.1 API - Apache Tomcat ${version}"
-      header="&lt;b&gt;Servlet 3.1 - Apache Tomcat ${version}&lt;/b&gt;"
+      windowtitle="Servlet 4.0 API Documentation - Apache Tomcat ${version}"
+      doctitle="Servlet 4.0 API - Apache Tomcat ${version}"
+      header="&lt;b&gt;Servlet 4.0 - Apache Tomcat ${version}&lt;/b&gt;"
       bottom="Copyright &amp;#169; 2000-${year} Apache Software Foundation. All Rights Reserved."
       encoding="UTF-8"
       docencoding="UTF-8"
       charset="UTF-8"
       additionalparam="-breakiterator -notimestamp"
-      maxmemory="256m" >
+      maxmemory="512m"
+      failonerror="true"
+      failonwarning="true">
       <classpath>
         <path refid="compile.classpath"/>
         <path refid="tomcat.webservices.classpath"/>
@@ -1925,7 +1800,9 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
       docencoding="UTF-8"
       charset="UTF-8"
       additionalparam="-breakiterator -notimestamp"
-      maxmemory="256m" >
+      maxmemory="512m"
+      failonerror="true"
+      failonwarning="true">
       <classpath>
         <path refid="compile.classpath"/>
         <path refid="tomcat.webservices.classpath"/>
@@ -1944,7 +1821,9 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
       docencoding="UTF-8"
       charset="UTF-8"
       additionalparam="-breakiterator -notimestamp"
-      maxmemory="256m" >
+      maxmemory="512m"
+      failonerror="true"
+      failonwarning="true">
       <classpath>
         <path refid="compile.classpath"/>
         <path refid="tomcat.webservices.classpath"/>
@@ -1963,7 +1842,9 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
       docencoding="UTF-8"
       charset="UTF-8"
       additionalparam="-breakiterator -notimestamp"
-      maxmemory="256m" >
+      maxmemory="512m"
+      failonerror="true"
+      failonwarning="true">
       <classpath>
         <path refid="compile.classpath"/>
         <path refid="tomcat.webservices.classpath"/>
@@ -1980,8 +1861,10 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
       encoding="UTF-8"
       docencoding="UTF-8"
       charset="UTF-8"
-      additionalparam="-breakiterator -notimestamp"
-      maxmemory="256m" >
+      additionalparam="-breakiterator -notimestamp ${java9.add.modules}"
+      maxmemory="512m"
+      failonerror="true"
+      failonwarning="true">
       <classpath>
         <path refid="compile.classpath"/>
         <path refid="tomcat.webservices.classpath"/>
@@ -1991,14 +1874,15 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
       <link href="../jspapi"/>
       <link href="../elapi"/>
       <link href="../websocketapi"/>
-      <link href="http://docs.oracle.com/javase/7/docs/api/"/>
+      <link href="http://docs.oracle.com/javase/8/docs/api/"/>
       <link href="http://commons.apache.org/proper/commons-io/javadocs/api-release/"/>
-      <link href="http://docs.oracle.com/javaee/7/api/"/>
-      <sourcepath>
-        <path location="${tomcat.dist}/src/java"/>
-        <!--jdbc-pool src files for javadoc-->
-        <path location="${tomcat.dist}/src/modules/jdbc-pool/src/main/java"/>
-      </sourcepath>
+      <link href="https://javaee.github.io/javaee-spec/javadocs/"/>
+      <packageset dir="${tomcat.dist}/src/java/">
+        <include name="org/**"/>
+        <exclude name="org/apache/el/parser/**"/>
+      </packageset>
+      <!--jdbc-pool src files for javadoc-->
+      <packageset dir="${tomcat.dist}/src/modules/jdbc-pool/src/main/java"/>
     </javadoc>
   </target>
 
@@ -2013,6 +1897,7 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
         <include name="jsp-api.jar"/>
         <include name="jasper.jar"/>
         <include name="jasper-el.jar"/>
+        <include name="jaspic-api.jar"/>
         <include name="servlet-api.jar"/>
         <include name="websocket-api.jar"/>
         <include name="tomcat-websocket.jar"/>
@@ -2037,6 +1922,7 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
           <exclude name="org/apache/tomcat/util/buf" />
           <exclude name="org/apache/tomcat/util/codec" />
           <exclude name="org/apache/tomcat/util/collections" />
+          <exclude name="org/apache/tomcat/util/compat" />
           <exclude name="org/apache/tomcat/util/descriptor" />
           <exclude name="org/apache/tomcat/util/file" />
           <exclude name="org/apache/tomcat/util/http" />
@@ -2060,8 +1946,9 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
     <!-- Copy deployer documentation -->
     <copy todir="${tomcat.deployer}">
       <fileset dir="${tomcat.build}/webapps/docs">
-        <include name="images/asf-logo.gif" />
-        <include name="images/tomcat.gif" />
+        <include name="images/asf-logo.svg" />
+        <include name="images/tomcat.png" />
+        <include name="images/docs-stylesheet.css" />
       </fileset>
     </copy>
     <copy tofile="${tomcat.deployer}/deployer-howto.html"
@@ -2119,9 +2006,26 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
     </copy>
   </target>
 
+  <target name="-installer-pre-init">
+    <property environment="env" />
+    <condition property="wine.ok">
+      <or>
+        <os family="windows" />
+        <available file="wine" filepath="${env.PATH}" />
+        <isset property="skip.installer"/>
+      </or>
+    </condition>
+  </target>
+
+  <target name="-installer-init" depends="-installer-pre-init" unless="${wine.ok}">
+    <fail message="The executable wine was not found on the current path.
+Wine is required to build the Windows installer when running a release build on
+a non-Windows platform. To skip building the Windows installer, set the
+skip.installer property in build.properties" />
+  </target>
+
   <target name="-installer-prep"
-      description="Prepares file structure required to build installer"
-      unless="skip.installer" depends="dist-static">
+      unless="skip.installer" depends="dist-static,-installer-init">
     <copy todir="${tomcat.dist}">
       <fileset dir="res">
         <include name="INSTALLLICENSE" />
@@ -2133,6 +2037,8 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
     <copy file="${nsis.installoptions.dll}" todir="${tomcat.dist}" />
     <copy file="${nsis.nsexec.dll}" todir="${tomcat.dist}" />
     <copy file="${nsis.nsisdl.dll}" todir="${tomcat.dist}" />
+    <copy file="${nsis.system.dll}" todir="${tomcat.dist}" />
+    <copy file="${nsis.nsdialogs.dll}" todir="${tomcat.dist}" />
     <copy file="res/tomcat.nsi" tofile="${tomcat.dist}/tomcat.nsi" overwrite="true" encoding="ISO-8859-1">
       <filterset refid="version.filters"/>
     </copy>
@@ -2143,7 +2049,6 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
   </target>
 
   <target name="-installer-create-tempinstaller"
-      description="Creates the temporary installer"
       unless="skip.installer" depends="-installer-prep">
     <exec dir="${tomcat.dist}" executable="${nsis.exe}" osfamily="windows">
       <arg value="/DUNINSTALLONLY" />
@@ -2161,7 +2066,6 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
   </target>
 
   <target name="-installer-create-uninstaller"
-      description="Execute the temporary installer to create the uninstaller"
       unless="skip.installer" depends="-installer-create-tempinstaller">
     <!-- Execute the temporary installer to create the uninstaller -->
     <exec dir="${tomcat.dist}" executable="${tomcat.dist}/tempinstaller.exe"
@@ -2173,7 +2077,6 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
   </target>
 
   <target name="-installer-sign-uninstaller"
-      description="Sign the uninstaller executable"
       unless="skip.installer" depends="-installer-create-uninstaller"
       if="${do.codesigning}">
     <taskdef name="signcode"
@@ -2181,6 +2084,8 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
         classpath="${tomcat.classes}" />
     <signcode userName="${codesigning.user}" password="${codesigning.pwd}"
         partnerCode="${codesigning.partnercode}"
+        keyStore="${codesigning.keyStore}"
+        keyStorePassword="${codesigning.keyStorePassword}"
         applicationName="Apache Tomcat ${version.major.minor} Uninstaller"
         applicationversion="${version}"
         signingService="${codesigning.service}">
@@ -2190,8 +2095,8 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
     </signcode>
   </target>
 
-  <target name="-installer" description="Builds Windows installer"
-      unless="skip.installer" depends="-installer-sign-uninstaller">
+  <target name="-installer" unless="skip.installer"
+      depends="-installer-sign-uninstaller">
     <exec dir="${tomcat.dist}" executable="${nsis.exe}" osfamily="windows">
       <arg value="/DNSISDIR=${nsis.home}" />
       <arg value="/V2" />
@@ -2207,12 +2112,16 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
     <hashAndSign file="${tomcat.release}/v${version}/bin/${final.name}.exe" />
   </target>
 
-  <target name="installer-sign" depends="-installer" if="${do.codesigning}" >
+  <target name="installer-sign"
+      description="Builds and optionally signs the Windows installer"
+      depends="-installer" if="${do.codesigning}" >
     <taskdef name="signcode"
         classname="org.apache.tomcat.buildutil.SignCode"
         classpath="${tomcat.classes}" />
     <signcode userName="${codesigning.user}" password="${codesigning.pwd}"
               partnerCode="${codesigning.partnercode}"
+              keyStore="${codesigning.keyStore}"
+              keyStorePassword="${codesigning.keyStorePassword}"
               applicationName="Apache Tomcat ${version.major.minor}"
               applicationversion="${version}"
               signingService="${codesigning.service}">
@@ -2224,6 +2133,7 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
     <delete file="${tomcat.release}/v${version}/bin/${final.name}.exe.asc" />
     <delete file="${tomcat.release}/v${version}/bin/${final.name}.exe.md5" />
     <delete file="${tomcat.release}/v${version}/bin/${final.name}.exe.sha1" />
+    <delete file="${tomcat.release}/v${version}/bin/${final.name}.exe.sha512" />
     <hashAndSign file="${tomcat.release}/v${version}/bin/${final.name}.exe" />
   </target>
 
@@ -2264,6 +2174,7 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
         <include name="*.asc"/>
         <include name="*.md5"/>
         <include name="*.sha1"/>
+        <include name="*.sha512"/>
       </fileset>
     </copy>
 
@@ -2306,7 +2217,6 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
         <include name="BENCHMARKS.txt"/>
         <exclude name="bin/service.bat"/>
         <exclude name="bin/x64/"/>
-        <exclude name="bin/i64/"/>
         <exclude name="bin/*.exe"/>
         <exclude name="bin/*.dll"/>
       </zipfileset>
@@ -2339,7 +2249,6 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
         <include name="RUNNING.txt"/>
         <include name="BENCHMARKS.txt"/>
         <exclude name="bin/x64/"/>
-        <exclude name="bin/i64/"/>
       </zipfileset>
 
     </zip>
@@ -2362,7 +2271,6 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
         <include name="RUNNING.txt"/>
         <include name="BENCHMARKS.txt"/>
         <exclude name="bin/x64/"/>
-        <exclude name="bin/i64/"/>
         <exclude name="bin/*.dll"/>
         <exclude name="bin/tomcat${version.major}.exe"/>
       </zipfileset>
@@ -2372,36 +2280,6 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
       </zipfileset>
     </zip>
     <hashAndSign file="${tomcat.release}/v${version}/bin/${final.name}-windows-x64.zip" />
-
-    <!-- Windows i64 package -->
-    <zip zipfile="${tomcat.release}/v${version}/bin/${final.name}-windows-i64.zip">
-      <zipfileset dir="${tomcat.dist}" prefix="${final.name}">
-        <include name="bin/**"/>
-        <include name="conf/**"/>
-        <include name="logs/**"/>
-        <include name="lib/**"/>
-        <include name="webapps/**"/>
-        <include name="work/**"/>
-        <include name="temp/**"/>
-        <include name="LICENSE"/>
-        <include name="NOTICE"/>
-        <include name="README.txt"/>
-        <include name="RELEASE-NOTES"/>
-        <include name="RUNNING.txt"/>
-        <include name="BENCHMARKS.txt"/>
-        <exclude name="bin/x64/"/>
-        <exclude name="bin/i64/"/>
-        <exclude name="bin/*.dll"/>
-        <exclude name="bin/tomcat${version.major}.exe"/>
-      </zipfileset>
-      <zipfileset dir="${tomcat.dist}/bin/i64" prefix="${final.name}/bin">
-        <include name="*.dll"/>
-        <include name="*.exe"/>
-      </zipfileset>
-    </zip>
-
-    <hashAndSign file="${tomcat.release}/v${version}/bin/${final.name}-windows-i64.zip" />
-
   </target>
 
   <!-- Packages the deployer distribution in zip format -->
@@ -2435,26 +2313,10 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
 
     <tar longfile="gnu" compression="gzip"
          tarfile="${tomcat.release}/v${version}/bin/${final.name}.tar.gz">
-      <tarfileset dir="${tomcat.dist}" mode="755" prefix="${final.name}">
-        <include name="bin/catalina.sh" />
-        <include name="bin/configtest.sh" />
-        <include name="bin/daemon.sh" />
-        <include name="bin/digest.sh" />
-        <include name="bin/jasper.sh" />
-        <include name="bin/jspc.sh" />
-        <include name="bin/setclasspath.sh" />
-        <include name="bin/startup.sh" />
-        <include name="bin/shutdown.sh" />
-        <include name="bin/tool-wrapper.sh" />
-        <include name="bin/tool-wrapper-using-launcher.sh" />
-        <include name="bin/shutdown-using-launcher.sh" />
-        <include name="bin/startup-using-launcher.sh" />
-        <include name="bin/version.sh" />
-      </tarfileset>
-      <tarfileset dir="${tomcat.dist}" mode="600" prefix="${final.name}">
+      <tarfileset dir="${tomcat.dist}" dirmode="700" filemode="600" prefix="${final.name}">
         <include name="conf/**" />
       </tarfileset>
-      <tarfileset dir="${tomcat.dist}" prefix="${final.name}">
+      <tarfileset dir="${tomcat.dist}" dirmode="750" filemode="640" prefix="${final.name}">
         <include name="bin/**" />
         <include name="lib/**" />
         <include name="logs/**" />
@@ -2485,9 +2347,26 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
         <exclude name="conf/**" />
         <exclude name="src/**" />
         <exclude name="bin/x64/"/>
-        <exclude name="bin/i64/"/>
         <exclude name="bin/*.exe"/>
         <exclude name="bin/*.dll"/>
+      </tarfileset>
+      <!-- These need to be added after the bin directory is added else the  -->
+      <!-- bin directory will pick up the wrong permissions.                 -->
+      <tarfileset dir="${tomcat.dist}" dirmode="750" filemode="750" prefix="${final.name}">
+        <include name="bin/catalina.sh" />
+        <include name="bin/configtest.sh" />
+        <include name="bin/daemon.sh" />
+        <include name="bin/digest.sh" />
+        <include name="bin/jasper.sh" />
+        <include name="bin/jspc.sh" />
+        <include name="bin/setclasspath.sh" />
+        <include name="bin/startup.sh" />
+        <include name="bin/shutdown.sh" />
+        <include name="bin/tool-wrapper.sh" />
+        <include name="bin/tool-wrapper-using-launcher.sh" />
+        <include name="bin/shutdown-using-launcher.sh" />
+        <include name="bin/startup-using-launcher.sh" />
+        <include name="bin/version.sh" />
       </tarfileset>
     </tar>
 
@@ -2587,7 +2466,7 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
       filesId="files.annotations-api"
       manifest="${tomcat.manifests}/annotations-api.jar.manifest" />
 
-    <!-- Servlet 3.1 Implementation JAR File -->
+    <!-- Servlet 4.0 Implementation JAR File -->
     <jarIt jarfile="${servlet-api-src.jar}"
       filesDir="java"
       filesId="files.servlet-api"
@@ -2619,6 +2498,14 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
     <jarIt jarfile="${tomcat-websocket-src.jar}"
       filesDir="java"
       filesId="files.tomcat-websocket" />
+
+    <!-- JASPIC 1.1 API JAR File -->
+    <jarIt jarfile="${jaspic-api-src.jar}"
+      filesDir="java"
+      filesId="files.jaspic-api"
+      manifest="${tomcat.manifests}/jaspic-api.jar.manifest"
+      notice="${tomcat.manifests}/jaspic-api.jar.notice"
+      license="${tomcat.manifests}/jaspic-api.jar.license" />
 
     <!-- Bootstrap JAR File -->
     <jarIt jarfile="${bootstrap-src.jar}"
@@ -2674,14 +2561,7 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
     <!-- Protocol handlers - Coyote -->
     <jarIt jarfile="${tomcat-coyote-src.jar}"
       filesDir="java"
-      filesId="files.tomcat-coyote"
-      notice="${tomcat.manifests}/tomcat-coyote.jar.notice"
-      license="${tomcat.manifests}/tomcat-coyote.license" />
-
-    <!-- SPDY -->
-    <jarIt jarfile="${tomcat-spdy-src.jar}"
-      filesDir="java"
-      filesId="files.tomcat-spdy" />
+      filesId="files.tomcat-coyote" />
 
     <!-- JNI -->
     <jarIt jarfile="${tomcat-jni-src.jar}"
@@ -2739,25 +2619,11 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
   <target name="download-compile"
           description="Download (and build) components necessary to compile" >
 
-    <antcall target="downloadfile-2">
-      <param name="sourcefile.1" value="${tomcat-native.loc.1}"/>
-      <param name="sourcefile.2" value="${tomcat-native.loc.2}"/>
-      <param name="destfile" value="${tomcat-native.tar.gz}"/>
-      <param name="destdir" value="${tomcat-native.home}"/>
-    </antcall>
-
     <!-- Download Commons Daemon -->
     <antcall target="downloadgz-2">
       <param name="sourcefile.1" value="${commons-daemon.bin.loc.1}"/>
       <param name="sourcefile.2" value="${commons-daemon.bin.loc.2}"/>
       <param name="destfile" value="${commons-daemon.jar}"/>
-    </antcall>
-
-    <antcall target="downloadfile-2">
-      <param name="sourcefile.1" value="${commons-daemon.native.src.loc.1}"/>
-      <param name="sourcefile.2" value="${commons-daemon.native.src.loc.2}"/>
-      <param name="destfile" value="${commons-daemon.native.src.tgz}"/>
-      <param name="destdir" value="${commons-daemon.home}"/>
     </antcall>
 
     <!-- Download JDT (Eclipse compiler) -->
@@ -2768,15 +2634,6 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
       <param name="destdir" value="${jdt.home}"/>
     </antcall>
 
-  </target>
-
-  <target name="download-npn"
-          description="Download optional NPN" >
-    <antcall target="downloadfile">
-     <param name="sourcefile" value="${npn.loc}"/>
-     <param name="destfile" value="${npn.jar}"/>
-     <param name="destdir" value="${npn.home}"/>
-    </antcall>
   </target>
 
   <target name="download-test-compile"
@@ -2825,14 +2682,39 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
 
   </target>
 
+  <target name="download-findbugs"
+          if="${execute.findbugs}"
+          description="Download FindBugs" >
+
+    <antcall target="downloadgz">
+      <param name="sourcefile" value="${findbugs.loc}"/>
+      <param name="destfile" value="${findbugs.jar}"/>
+    </antcall>
+
+  </target>
+
   <target name="download-dist"
           description="Download additional components for a distribution" >
+
+    <antcall target="downloadfile-2">
+      <param name="sourcefile.1" value="${tomcat-native.loc.1}"/>
+      <param name="sourcefile.2" value="${tomcat-native.loc.2}"/>
+      <param name="destfile" value="${tomcat-native.tar.gz}"/>
+      <param name="destdir" value="${tomcat-native.home}"/>
+    </antcall>
 
     <antcall target="downloadzip-2">
       <param name="sourcefile.1" value="${tomcat-native.win.1}"/>
       <param name="sourcefile.2" value="${tomcat-native.win.2}"/>
       <param name="destfile" value="${tomcat-native.home}/LICENSE"/>
       <param name="destdir" value="${tomcat-native.home}"/>
+    </antcall>
+
+    <antcall target="downloadfile-2">
+      <param name="sourcefile.1" value="${commons-daemon.native.src.loc.1}"/>
+      <param name="sourcefile.2" value="${commons-daemon.native.src.loc.2}"/>
+      <param name="destfile" value="${commons-daemon.native.src.tgz}"/>
+      <param name="destdir" value="${commons-daemon.home}"/>
     </antcall>
 
     <antcall target="downloadzip-2">
@@ -2989,7 +2871,7 @@ Apache Tomcat ${version} native binaries for Win64 AMD64/EMT64 platform.
     <copy file="${tomcat.home}/res/ide-support/eclipse/org.eclipse.jdt.core.prefs.properties" tofile="${tomcat.home}/.settings/org.eclipse.jdt.core.prefs"/>
 
     <echo>Eclipse project files created.
-Read the Building page on the Apache Tomcat documentation site for details on how to configure your Eclipse workplace.</echo>
+Read the Building page on the Apache Tomcat documentation site for details on how to configure your Eclipse workspace.</echo>
   </target>
 
   <!-- ============================ NetBeans =============================== -->
@@ -3020,7 +2902,7 @@ Use the "ide-netbeans-replace" target if you wish to overwrite them.</echo>
 
   <target name="-ide-netbeans-create"
           unless="tomcat-nb.home.exists">
-    <!-- Unconditionally create or ovverwrite default NetBeans project files -->
+    <!-- Unconditionally create or overwrite default NetBeans project files -->
     <property name="tomcat-nb.dist" value="${tomcat.home}/res/ide-support/netbeans" />
     <mkdir dir="${tomcat-nb.home}/"/>
     <copy todir="${tomcat-nb.home}" overwrite="true">
@@ -3072,13 +2954,16 @@ Read the Building page on the Apache Tomcat documentation site for details on ho
       <local name="filename" />
       <local name="md5value" />
       <local name="sha1value" />
+      <local name="sha512value" />
 
       <basename file="@{file}" property="filename" />
       <checksum algorithm="MD5" file="@{file}" property="md5value" />
       <checksum algorithm="SHA-1" file="@{file}" property="sha1value" />
+      <checksum algorithm="SHA-512" file="@{file}" property="sha512value" />
 
       <echo file="@{file}.md5" message="${md5value}${md5sum.binary-prefix}${filename}" />
       <echo file="@{file}.sha1" message="${sha1value}${md5sum.binary-prefix}${filename}" />
+      <echo file="@{file}.sha512" message="${sha512value}${md5sum.binary-prefix}${filename}" />
 
       <antcall target="sign" >
         <param name="file" value="@{file}" />
@@ -3094,6 +2979,7 @@ Read the Building page on the Apache Tomcat documentation site for details on ho
     <fail unless="file" />
     <exec executable="${gpg.exec}" failonerror="true"
           inputstring="${gpg.passphrase}">
+      <arg value="--batch"/>
       <arg value="--passphrase-fd"/>
       <arg value="0"/>
       <arg value="-a"/>

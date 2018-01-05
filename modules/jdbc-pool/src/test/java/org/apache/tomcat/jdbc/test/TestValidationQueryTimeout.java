@@ -26,8 +26,6 @@ import java.sql.Statement;
 import java.util.Properties;
 import java.util.logging.Logger;
 
-import static org.junit.Assert.fail;
-
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -69,8 +67,9 @@ public class TestValidationQueryTimeout extends DefaultTestCase {
     @Test
     public void testValidationQueryTimeoutEnabled() throws Exception {
         // because testOnBorrow is true, this triggers the validation query
-        this.datasource.getConnection();
+        Connection con = this.datasource.getConnection();
         Assert.assertTrue(isTimeoutSet);
+        con.close();
     }
 
     @Test
@@ -78,8 +77,9 @@ public class TestValidationQueryTimeout extends DefaultTestCase {
         this.datasource.setValidationQueryTimeout(-1);
 
         // because testOnBorrow is true, this triggers the validation query
-        this.datasource.getConnection();
+        Connection con = this.datasource.getConnection();
         Assert.assertFalse(isTimeoutSet);
+        con.close();
     }
 
     @Test
@@ -111,8 +111,9 @@ public class TestValidationQueryTimeout extends DefaultTestCase {
         // pull another connection and check it
         TIMEOUT = 10;
         isTimeoutSet = false;
-        this.datasource.getConnection();
+        Connection con2 = this.datasource.getConnection();
         Assert.assertTrue(isTimeoutSet);
+        con2.close();
     }
 
     // this test depends on the execution time of the validation query
@@ -165,7 +166,7 @@ public class TestValidationQueryTimeout extends DefaultTestCase {
         } catch (SQLTimeoutException ex) {
 
         } catch (SQLException x) {
-            fail("We should have got a timeout exception.");
+            Assert.fail("We should have got a timeout exception.");
         } finally {
             end = System.currentTimeMillis();
 

@@ -28,8 +28,11 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.TimeZone;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+import javax.servlet.RequestDispatcher;
 import javax.servlet.ServletException;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpSession;
@@ -39,8 +42,11 @@ import org.apache.catalina.Globals;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.Session;
+import org.apache.catalina.connector.ClientAbortException;
 import org.apache.catalina.connector.Request;
 import org.apache.catalina.connector.Response;
+import org.apache.catalina.util.TLSUtil;
+import org.apache.coyote.ActionCode;
 import org.apache.coyote.RequestInfo;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
@@ -76,13 +82,19 @@ import org.apache.tomcat.util.collections.SynchronizedStack;
  * <li><b>%s</b> - HTTP status code of the response
  * <li><b>%S</b> - User session ID
  * <li><b>%t</b> - Date and time, in Common Log Format format
- * <li><b>%t{format}</b> - Date and time, in any format supported by SimpleDateFormat
  * <li><b>%u</b> - Remote user that was authenticated
  * <li><b>%U</b> - Requested URL path
  * <li><b>%v</b> - Local server name
  * <li><b>%D</b> - Time taken to process the request, in millis
  * <li><b>%T</b> - Time taken to process the request, in seconds
+ * <li><b>%F</b> - Time taken to commit the response, in millis
  * <li><b>%I</b> - current Request thread name (can compare later with stacktraces)
+ * <li><b>%X</b> - Connection status when response is completed:
+ *   <ul>
+ *   <li><code>X</code> = Connection aborted before the response completed.</li>
+ *   <li><code>+</code> = Connection may be kept alive after the response is sent.</li>
+ *   <li><code>-</code> = Connection will be closed after the response is sent.</li>
+ *   </ul>
  * </ul>
  * <p>In addition, the caller can specify one of the following aliases for
  * commonly utilized patterns:</p>
@@ -138,14 +150,14 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
     /**
      * The list of our time format types.
      */
-    private static enum FormatType {
+    private enum FormatType {
         CLF, SEC, MSEC, MSEC_FRAC, SDF
     }
 
     /**
      * The list of our port types.
      */
-    private static enum PortType {
+    private enum PortType {
         LOCAL, REMOTE
     }
 
@@ -333,7 +345,7 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
         private final Locale cacheDefaultLocale;
         private final DateFormatCache parent;
         protected final Cache cLFCache;
-        private final HashMap<String, Cache> formatCache = new HashMap<>();
+        private final Map<String, Cache> formatCache = new HashMap<>();
 
         protected DateFormatCache(int size, Locale loc, DateFormatCache parent) {
             cacheSize = size;
@@ -438,6 +450,9 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
     protected AccessLogElement[] logElements = null;
 
     /**
+     * Should this valve set request attributes for IP address, hostname,
+     * protocol and port used for the request.
+     * Default is <code>false</code>.
      * @see #setRequestAttributesEnabled(boolean)
      */
     protected boolean requestAttributesEnabled = false;
@@ -457,10 +472,17 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
      */
     private int maxLogMessageBufferSize = 256;
 
+    /**
+     * Does the configured log pattern include a known TLS attribute?
+     */
+    private boolean tlsAttributeRequired = false;
+
+
     // ------------------------------------------------------------- Properties
 
     /**
      * {@inheritDoc}
+     * Default is <code>false</code>.
      */
     @Override
     public void setRequestAttributesEnabled(boolean requestAttributesEnabled) {
@@ -476,7 +498,7 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
     }
 
     /**
-     * @return Returns the enabled.
+     * @return the enabled flag.
      */
     public boolean getEnabled() {
         return enabled;
@@ -491,10 +513,10 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
     }
 
     /**
-     * Return the format pattern.
+     * @return the format pattern.
      */
     public String getPattern() {
-        return (this.pattern);
+        return this.pattern;
     }
 
 
@@ -520,6 +542,7 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
      * Return whether the attribute name to look for when
      * performing conditional logging. If null, every
      * request is logged.
+     * @return the attribute name
      */
     public String getCondition() {
         return condition;
@@ -541,6 +564,7 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
      * Return whether the attribute name to look for when
      * performing conditional logging. If null, every
      * request is logged.
+     * @return the attribute name
      */
     public String getConditionUnless() {
         return getCondition();
@@ -561,6 +585,7 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
      * Return whether the attribute name to look for when
      * performing conditional logging. If null, every
      * request is logged.
+     * @return the attribute name
      */
     public String getConditionIf() {
         return conditionIf;
@@ -580,6 +605,7 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
     /**
      * Return the locale used to format timestamps in log entries and in
      * log file name suffix.
+     * @return the locale
      */
     public String getLocale() {
         return localeName;
@@ -614,6 +640,14 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
     @Override
     public void invoke(Request request, Response response) throws IOException,
             ServletException {
+        if (tlsAttributeRequired) {
+            // The log pattern uses TLS attributes. Ensure these are populated
+            // before the request is processed because with NIO2 it is possible
+            // for the connection to be closed (and the TLS info lost) before
+            // the access log requests the TLS info. Requesting it now causes it
+            // to be cached in the request.
+            request.getAttribute(Globals.CERTIFICATES_ATTR);
+        }
         getNext().invoke(request, response);
     }
 
@@ -672,8 +706,8 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
      * second since a new Date was created, this method simply gives out the
      * same Date again so that the system doesn't spend time creating Date
      * objects unnecessarily.
-     *
-     * @return Date
+     * @param systime The time
+     * @return the date object
      */
     private static Date getDate(long systime) {
         Date date = localDate.get();
@@ -683,7 +717,10 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
 
 
     /**
-     * Find a locale by name
+     * Find a locale by name.
+     * @param name The locale name
+     * @param fallback Fallback locale if the name is not found
+     * @return the locale object
      */
     protected static Locale findLocale(String name, Locale fallback) {
         if (name == null || name.isEmpty()) {
@@ -691,7 +728,7 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
         } else {
             for (Locale l: Locale.getAvailableLocales()) {
                 if (name.equals(l.toString())) {
-                    return(l);
+                    return l;
                 }
             }
         }
@@ -873,7 +910,7 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
     }
 
     /**
-     * write date and time, in configurable format (default CLF) - %t or %t{format}
+     * write date and time, in configurable format (default CLF) - %t or %{format}t
      */
     protected class DateAndTimeElement implements AccessLogElement {
 
@@ -1000,17 +1037,22 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
             if (usesBegin) {
                 timestamp -= time;
             }
-            switch (type) {
-            case CLF:
+            /*  Implementation note: This is deliberately not implemented using
+             *  switch. If a switch is used the compiler (at least the Oracle
+             *  one) will use a synthetic class to implement the switch. The
+             *  problem is that this class needs to be pre-loaded when using a
+             *  SecurityManager and the name of that class will depend on any
+             *  anonymous inner classes and any other synthetic classes. As such
+             *  the name is not constant and keeping the pre-loading up to date
+             *  as the name changes is error prone.
+             */
+            if (type == FormatType.CLF) {
                 buf.append(localDateCache.get().getFormat(timestamp));
-                break;
-            case SEC:
+            } else if (type == FormatType.SEC) {
                 buf.append(Long.toString(timestamp / 1000));
-                break;
-            case MSEC:
+            } else if (type == FormatType.MSEC) {
                 buf.append(Long.toString(timestamp));
-                break;
-            case MSEC_FRAC:
+            } else if (type == FormatType.MSEC_FRAC) {
                 frac = timestamp % 1000;
                 if (frac < 100) {
                     if (frac < 10) {
@@ -1021,8 +1063,8 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
                     }
                 }
                 buf.append(Long.toString(frac));
-                break;
-            case SDF:
+            } else {
+                // FormatType.SDF
                 String temp = localDateCache.get().getFormat(format, locale, timestamp);
                 if (usesMsecs) {
                     frac = timestamp % 1000;
@@ -1040,7 +1082,6 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
                     temp = temp.replace(msecPattern, Long.toString(frac));
                 }
                 buf.append(temp);
-                break;
             }
         }
     }
@@ -1156,7 +1197,7 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
         private final boolean conversion;
 
         /**
-         * if conversion is true, write '-' instead of 0 - %b
+         * @param conversion <code>true</code> to write '-' instead of 0 - %b.
          */
         public ByteSentElement(boolean conversion) {
             this.conversion = conversion;
@@ -1210,8 +1251,8 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
         private final boolean millis;
 
         /**
-         * if millis is true, write time in millis - %D
-         * if millis is false, write time in seconds - %T
+         * @param millis <code>true</code>, write time in millis - %D,
+         * if <code>false</code>, write time in seconds - %T
          */
         public ElapsedTimeElement(boolean millis) {
             this.millis = millis;
@@ -1476,9 +1517,51 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
         }
     }
 
+    /**
+     * Write connection status when response is completed - %X
+     */
+    protected static class ConnectionStatusElement implements AccessLogElement {
+        @Override
+        public void addElement(CharArrayWriter buf, Date date, Request request, Response response, long time) {
+            if (response != null && request != null) {
+                boolean statusFound = false;
+
+                // Check whether connection IO is in "not allowed" state
+                AtomicBoolean isIoAllowed = new AtomicBoolean(false);
+                request.getCoyoteRequest().action(ActionCode.IS_IO_ALLOWED, isIoAllowed);
+                if (!isIoAllowed.get()) {
+                    buf.append('X');
+                    statusFound = true;
+                } else {
+                    // Check for connection aborted cond
+                    if (response.isError()) {
+                        Throwable ex = (Throwable) request.getAttribute(RequestDispatcher.ERROR_EXCEPTION);
+                        if (ex instanceof ClientAbortException) {
+                            buf.append('X');
+                            statusFound = true;
+                        }
+                    }
+                }
+
+                // If status is not found yet, cont to check whether connection is keep-alive or close
+                if (!statusFound) {
+                    String connStatus = response.getHeader(org.apache.coyote.http11.Constants.CONNECTION);
+                    if (org.apache.coyote.http11.Constants.CLOSE.equalsIgnoreCase(connStatus)) {
+                        buf.append('-');
+                    } else {
+                        buf.append('+');
+                    }
+                }
+            } else {
+                // Unknown connection status
+                buf.append('?');
+            }
+        }
+    }
 
     /**
-     * parse pattern string and create the array of AccessLogElement
+     * Parse pattern string and create the array of AccessLogElement.
+     * @return the log elements array
      */
     protected AccessLogElement[] createLogElements() {
         List<AccessLogElement> list = new ArrayList<>();
@@ -1527,7 +1610,10 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
     }
 
     /**
-     * create an AccessLogElement implementation which needs an element name
+     * Create an AccessLogElement implementation which needs an element name.
+     * @param name Header name
+     * @param pattern char in the log pattern
+     * @return the log element
      */
     protected AccessLogElement createAccessLogElement(String name, char pattern) {
         switch (pattern) {
@@ -1540,6 +1626,9 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
         case 'p':
             return new PortElement(name);
         case 'r':
+            if (TLSUtil.isTLSRequestAttribute(name)) {
+                tlsAttributeRequired = true;
+            }
             return new RequestAttributeElement(name);
         case 's':
             return new SessionAttributeElement(name);
@@ -1551,7 +1640,9 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
     }
 
     /**
-     * create an AccessLogElement implementation
+     * Create an AccessLogElement implementation.
+     * @param pattern char in the log pattern
+     * @return the log element
      */
     protected AccessLogElement createAccessLogElement(char pattern) {
         switch (pattern) {
@@ -1597,6 +1688,8 @@ public abstract class AbstractAccessLogValve extends ValveBase implements Access
             return new LocalServerNameElement();
         case 'I':
             return new ThreadNameElement();
+        case 'X':
+            return new ConnectionStatusElement();
         default:
             return new StringElement("???" + pattern + "???");
         }

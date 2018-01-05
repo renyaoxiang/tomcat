@@ -23,14 +23,20 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import javax.management.ObjectName;
+
+import org.apache.catalina.tribes.Channel;
 import org.apache.catalina.tribes.ChannelMessage;
 import org.apache.catalina.tribes.ChannelReceiver;
 import org.apache.catalina.tribes.MessageListener;
 import org.apache.catalina.tribes.io.ListenCallback;
+import org.apache.catalina.tribes.jmx.JmxRegistry;
 import org.apache.catalina.tribes.util.ExecutorFactory;
+import org.apache.catalina.tribes.util.StringManager;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
 
@@ -41,6 +47,8 @@ public abstract class ReceiverBase implements ChannelReceiver, ListenCallback, R
     private static final Log log = LogFactory.getLog(ReceiverBase.class);
 
     private static final Object bindLock = new Object();
+
+    protected static final StringManager sm = StringManager.getManager(Constants.Package);
 
     private MessageListener listener;
     private String host = "auto";
@@ -76,7 +84,12 @@ public abstract class ReceiverBase implements ChannelReceiver, ListenCallback, R
     private long maxIdleTime = 60000;
 
     private ExecutorService executor;
+    private Channel channel;
 
+    /**
+     * the ObjectName of this Receiver.
+     */
+    private ObjectName oname = null;
 
     public ReceiverBase() {
     }
@@ -85,22 +98,32 @@ public abstract class ReceiverBase implements ChannelReceiver, ListenCallback, R
     public void start() throws IOException {
         if ( executor == null ) {
             //executor = new ThreadPoolExecutor(minThreads,maxThreads,60,TimeUnit.SECONDS,new LinkedBlockingQueue<Runnable>());
-            TaskThreadFactory tf = new TaskThreadFactory("Tribes-Task-Receiver-");
+            String channelName = "";
+            if (channel.getName() != null) channelName = "[" + channel.getName() + "]";
+            TaskThreadFactory tf = new TaskThreadFactory("Tribes-Task-Receiver" + channelName + "-");
             executor = ExecutorFactory.newThreadPool(minThreads, maxThreads, maxIdleTime, TimeUnit.MILLISECONDS, tf);
         }
+        // register jmx
+        JmxRegistry jmxRegistry = JmxRegistry.getRegistry(channel);
+        if (jmxRegistry != null) this.oname = jmxRegistry.registerJmx(",component=Receiver", this);
     }
 
     @Override
     public void stop() {
         if ( executor != null ) executor.shutdownNow();//ignore left overs
         executor = null;
+        if (oname != null) {
+            JmxRegistry jmxRegistry = JmxRegistry.getRegistry(channel);
+            if (jmxRegistry != null) jmxRegistry.unregisterJmx(oname);
+            oname = null;
+        }
+        channel = null;
     }
 
     /**
      * getMessageListener
      *
      * @return MessageListener
-     * TODO Implement this org.apache.catalina.tribes.ChannelReceiver method
      */
     @Override
     public MessageListener getMessageListener() {
@@ -110,7 +133,6 @@ public abstract class ReceiverBase implements ChannelReceiver, ListenCallback, R
     /**
      *
      * @return The port
-     * TODO Implement this org.apache.catalina.tribes.ChannelReceiver method
      */
     @Override
     public int getPort() {
@@ -129,7 +151,6 @@ public abstract class ReceiverBase implements ChannelReceiver, ListenCallback, R
      * setMessageListener
      *
      * @param listener MessageListener
-     * TODO Implement this org.apache.catalina.tribes.ChannelReceiver method
      */
     @Override
     public void setMessageListener(MessageListener listener) {
@@ -157,7 +178,7 @@ public abstract class ReceiverBase implements ChannelReceiver, ListenCallback, R
                     log.debug("Starting replication listener on address:"+ host);
                 bind = java.net.InetAddress.getByName(host);
             } catch (IOException ioe) {
-                log.error("Failed bind replication listener on address:"+ host, ioe);
+                log.error(sm.getString("receiverBase.bind.failed", host), ioe);
             }
         }
         return bind;
@@ -172,7 +193,7 @@ public abstract class ReceiverBase implements ChannelReceiver, ListenCallback, R
      * @param portstart     Starting port for bind attempts
      * @param retries       Number of times to attempt to bind (port incremented
      *                      between attempts)
-     * @throws IOException
+     * @throws IOException Socket bind error
      */
     protected void bind(ServerSocket socket, int portstart, int retries) throws IOException {
         synchronized (bindLock) {
@@ -183,13 +204,12 @@ public abstract class ReceiverBase implements ChannelReceiver, ListenCallback, R
                     addr = new InetSocketAddress(getBind(), port);
                     socket.bind(addr);
                     setPort(port);
-                    log.info("Receiver Server Socket bound to:"+addr);
+                    log.info(sm.getString("receiverBase.socket.bind", addr));
                     retries = 0;
                 } catch ( IOException x) {
                     retries--;
                     if ( retries <= 0 ) {
-                        log.info("Unable to bind server socket to:" + addr +
-                                " throwing error.");
+                        log.info(sm.getString("receiverBase.unable.bind", addr));
                         throw x;
                     }
                     port++;
@@ -200,11 +220,12 @@ public abstract class ReceiverBase implements ChannelReceiver, ListenCallback, R
 
     /**
      * Same as bind() except it does it for the UDP port
-     * @param socket
-     * @param portstart
-     * @param retries
-     * @return int
-     * @throws IOException
+     * @param socket The socket to bind
+     * @param portstart     Starting port for bind attempts
+     * @param retries       Number of times to attempt to bind (port incremented
+     *                      between attempts)
+     * @return int The retry count
+     * @throws IOException Socket bind error
      */
     protected int bindUdp(DatagramSocket socket, int portstart, int retries) throws IOException {
         InetSocketAddress addr = null;
@@ -213,12 +234,12 @@ public abstract class ReceiverBase implements ChannelReceiver, ListenCallback, R
                 addr = new InetSocketAddress(getBind(), portstart);
                 socket.bind(addr);
                 setUdpPort(portstart);
-                log.info("UDP Receiver Server Socket bound to:"+addr);
+                log.info(sm.getString("receiverBase.udp.bind", addr));
                 return 0;
             }catch ( IOException x) {
                 retries--;
                 if ( retries <= 0 ) {
-                    log.info("Unable to bind UDP socket to:"+addr+" throwing error.");
+                    log.info(sm.getString("receiverBase.unable.bind.udp", addr));
                     throw x;
                 }
                 portstart++;
@@ -484,6 +505,65 @@ public abstract class ReceiverBase implements ChannelReceiver, ListenCallback, R
 
     public void setUdpTxBufSize(int udpTxBufSize) {
         this.udpTxBufSize = udpTxBufSize;
+    }
+
+    @Override
+    public Channel getChannel() {
+        return channel;
+    }
+
+    @Override
+    public void setChannel(Channel channel) {
+        this.channel = channel;
+    }
+
+    // ---------------------------------------------- stats of the thread pool
+    /**
+     * Return the current number of threads that are managed by the pool.
+     * @return the current number of threads that are managed by the pool
+     */
+    public int getPoolSize() {
+        if (executor instanceof ThreadPoolExecutor) {
+            return ((ThreadPoolExecutor) executor).getPoolSize();
+        } else {
+            return -1;
+        }
+    }
+
+    /**
+     * Return the current number of threads that are in use.
+     * @return the current number of threads that are in use
+     */
+    public int getActiveCount() {
+        if (executor instanceof ThreadPoolExecutor) {
+            return ((ThreadPoolExecutor) executor).getActiveCount();
+        } else {
+            return -1;
+        }
+    }
+
+    /**
+     * Return the total number of tasks that have ever been scheduled for execution by the pool.
+     * @return the total number of tasks that have ever been scheduled for execution by the pool
+     */
+    public long getTaskCount() {
+        if (executor instanceof ThreadPoolExecutor) {
+            return ((ThreadPoolExecutor) executor).getTaskCount();
+        } else {
+            return -1;
+        }
+    }
+
+    /**
+     * Return the total number of tasks that have completed execution by the pool.
+     * @return the total number of tasks that have completed execution by the pool
+     */
+    public long getCompletedTaskCount() {
+        if (executor instanceof ThreadPoolExecutor) {
+            return ((ThreadPoolExecutor) executor).getCompletedTaskCount();
+        } else {
+            return -1;
+        }
     }
 
     // ---------------------------------------------- ThreadFactory Inner Class

@@ -30,6 +30,9 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.apache.juli.logging.Log;
+import org.apache.juli.logging.LogFactory;
+
 import async.Stockticker.Stock;
 import async.Stockticker.TickListener;
 
@@ -37,13 +40,15 @@ public class AsyncStockServlet extends HttpServlet implements TickListener, Asyn
 
     private static final long serialVersionUID = 1L;
 
+    private static final Log log = LogFactory.getLog(AsyncStockServlet.class);
+
     private static final ConcurrentLinkedQueue<AsyncContext> clients =
             new ConcurrentLinkedQueue<>();
     private static final AtomicInteger clientcount = new AtomicInteger(0);
     private static final Stockticker ticker = new Stockticker();
 
     public AsyncStockServlet() {
-        System.out.println("AsyncStockServlet created");
+        log.info("AsyncStockServlet created");
     }
 
 
@@ -80,25 +85,23 @@ public class AsyncStockServlet extends HttpServlet implements TickListener, Asyn
         }
     }
 
-    public void writeStock(AsyncContext actx, Stock stock) {
+
+    public void writeStock(AsyncContext actx, Stock stock) throws IOException {
         HttpServletResponse response = (HttpServletResponse)actx.getResponse();
-        try {
-            PrintWriter writer = response.getWriter();
-            writer.write("STOCK#");//make client parsing easier
-            writer.write(stock.getSymbol());
-            writer.write("#");
-            writer.write(stock.getValueAsString());
-            writer.write("#");
-            writer.write(stock.getLastChangeAsString());
-            writer.write("#");
-            writer.write(String.valueOf(stock.getCnt()));
-            writer.write("\n");
-            writer.flush();
-            response.flushBuffer();
-        }catch (IOException x) {
-            try {actx.complete();}catch (Exception ignore){/* Ignore */}
-        }
+        PrintWriter writer = response.getWriter();
+        writer.write("STOCK#");//make client parsing easier
+        writer.write(stock.getSymbol());
+        writer.write("#");
+        writer.write(stock.getValueAsString());
+        writer.write("#");
+        writer.write(stock.getLastChangeAsString());
+        writer.write("#");
+        writer.write(String.valueOf(stock.getCnt()));
+        writer.write("\n");
+        writer.flush();
+        response.flushBuffer();
     }
+
 
     @Override
     public void onComplete(AsyncEvent event) throws IOException {

@@ -57,9 +57,9 @@ final class StandardHostValve extends ValveBase {
     private static final ClassLoader MY_CLASSLOADER =
             StandardHostValve.class.getClassLoader();
 
-    protected static final boolean STRICT_SERVLET_COMPLIANCE;
+    static final boolean STRICT_SERVLET_COMPLIANCE;
 
-    protected static final boolean ACCESS_SESSION;
+    static final boolean ACCESS_SESSION;
 
     static {
         STRICT_SERVLET_COMPLIANCE = Globals.STRICT_SERVLET_COMPLIANCE;
@@ -69,8 +69,7 @@ final class StandardHostValve extends ValveBase {
         if (accessSession == null) {
             ACCESS_SESSION = STRICT_SERVLET_COMPLIANCE;
         } else {
-            ACCESS_SESSION =
-                Boolean.valueOf(accessSession).booleanValue();
+            ACCESS_SESSION = Boolean.parseBoolean(accessSession);
         }
     }
 
@@ -124,7 +123,7 @@ final class StandardHostValve extends ValveBase {
         try {
             context.bind(Globals.IS_SECURITY_ENABLED, MY_CLASSLOADER);
 
-            if (!asyncAtStart && !context.fireRequestInitEvent(request)) {
+            if (!asyncAtStart && !context.fireRequestInitEvent(request.getRequest())) {
                 // Don't fire listeners during async processing (the listener
                 // fired for the request that called startAsync()).
                 // If a request init listener throws an exception, the request
@@ -148,13 +147,10 @@ final class StandardHostValve extends ValveBase {
                 }
             } catch (Throwable t) {
                 ExceptionUtils.handleThrowable(t);
+                container.getLogger().error("Exception Processing " + request.getRequestURI(), t);
                 // If a new error occurred while trying to report a previous
-                // error simply log the new error and allow the original error
-                // to be reported.
-                if (response.isErrorReportRequired()) {
-                    container.getLogger().error("Exception Processing " +
-                            request.getRequestURI(), t);
-                } else {
+                // error allow the original error to be reported.
+                if (!response.isErrorReportRequired()) {
                     request.setAttribute(RequestDispatcher.ERROR_EXCEPTION, t);
                     throwable(request, response, t);
                 }
@@ -182,8 +178,8 @@ final class StandardHostValve extends ValveBase {
                 }
             }
 
-            if (!request.isAsync() && (!asyncAtStart || !response.isErrorReportRequired())) {
-                context.fireRequestDestroyEvent(request);
+            if (!request.isAsync() && !asyncAtStart) {
+                context.fireRequestDestroyEvent(request.getRequest());
             }
         } finally {
             // Access a session (if present) to update last accessed time, based
@@ -232,7 +228,7 @@ final class StandardHostValve extends ValveBase {
             // Look for a default error page
             errorPage = context.findErrorPage(0);
         }
-        if (errorPage != null && response.setErrorReported()) {
+        if (errorPage != null && response.isErrorReportRequired()) {
             response.setAppCommitted(false);
             request.setAttribute(RequestDispatcher.ERROR_STATUS_CODE,
                               Integer.valueOf(statusCode));
@@ -256,6 +252,7 @@ final class StandardHostValve extends ValveBase {
             request.setAttribute(RequestDispatcher.ERROR_REQUEST_URI,
                                  request.getRequestURI());
             if (custom(request, response, errorPage)) {
+                response.setErrorReported();
                 try {
                     response.finishResponse();
                 } catch (ClientAbortException e) {
@@ -318,7 +315,7 @@ final class StandardHostValve extends ValveBase {
                 request.setAttribute(Globals.DISPATCHER_TYPE_ATTR,
                         DispatcherType.ERROR);
                 request.setAttribute(RequestDispatcher.ERROR_STATUS_CODE,
-                        new Integer(HttpServletResponse.SC_INTERNAL_SERVER_ERROR));
+                        Integer.valueOf(HttpServletResponse.SC_INTERNAL_SERVER_ERROR));
                 request.setAttribute(RequestDispatcher.ERROR_MESSAGE,
                                   throwable.getMessage());
                 request.setAttribute(RequestDispatcher.ERROR_EXCEPTION,
@@ -380,6 +377,12 @@ final class StandardHostValve extends ValveBase {
             RequestDispatcher rd =
                 servletContext.getRequestDispatcher(errorPage.getLocation());
 
+            if (rd == null) {
+                container.getLogger().error(
+                    sm.getString("standardHostValue.customStatusFailed", errorPage.getLocation()));
+                return false;
+            }
+
             if (response.isCommitted()) {
                 // Response is committed - including the error page is the
                 // best we can do
@@ -421,14 +424,14 @@ final class StandardHostValve extends ValveBase {
         (Context context, Throwable exception) {
 
         if (exception == null) {
-            return (null);
+            return null;
         }
         Class<?> clazz = exception.getClass();
         String name = clazz.getName();
         while (!Object.class.equals(clazz)) {
             ErrorPage errorPage = context.findErrorPage(name);
             if (errorPage != null) {
-                return (errorPage);
+                return errorPage;
             }
             clazz = clazz.getSuperclass();
             if (clazz == null) {
@@ -436,7 +439,7 @@ final class StandardHostValve extends ValveBase {
             }
             name = clazz.getName();
         }
-        return (null);
+        return null;
 
     }
 }

@@ -97,6 +97,7 @@ public class CharsetMapper {
      * content type header.
      *
      * @param locale The locale for which to calculate a character set
+     * @return the charset name
      */
     public String getCharset(Locale locale) {
         // Match full language_country_variant first, then language_country,
@@ -109,7 +110,7 @@ public class CharsetMapper {
                 charset = map.getProperty(locale.getLanguage());
             }
         }
-        return (charset);
+        return charset;
     }
 
 

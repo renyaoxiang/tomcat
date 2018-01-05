@@ -25,19 +25,15 @@ import java.nio.ByteBuffer;
 import java.security.NoSuchProviderException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
-import java.util.concurrent.atomic.AtomicBoolean;
 
-import javax.servlet.RequestDispatcher;
 import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpUpgradeHandler;
 
 import org.apache.coyote.AbstractProcessor;
 import org.apache.coyote.ActionCode;
-import org.apache.coyote.AsyncContextCallback;
+import org.apache.coyote.Adapter;
 import org.apache.coyote.ErrorState;
 import org.apache.coyote.InputBuffer;
 import org.apache.coyote.OutputBuffer;
-import org.apache.coyote.Request;
 import org.apache.coyote.RequestInfo;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
@@ -45,13 +41,10 @@ import org.apache.tomcat.util.ExceptionUtils;
 import org.apache.tomcat.util.buf.ByteChunk;
 import org.apache.tomcat.util.buf.HexUtils;
 import org.apache.tomcat.util.buf.MessageBytes;
-import org.apache.tomcat.util.http.HttpMessages;
 import org.apache.tomcat.util.http.MimeHeaders;
-import org.apache.tomcat.util.net.AbstractEndpoint;
 import org.apache.tomcat.util.net.AbstractEndpoint.Handler.SocketState;
-import org.apache.tomcat.util.net.DispatchType;
+import org.apache.tomcat.util.net.ApplicationBufferHandler;
 import org.apache.tomcat.util.net.SSLSupport;
-import org.apache.tomcat.util.net.SocketStatus;
 import org.apache.tomcat.util.net.SocketWrapperBase;
 import org.apache.tomcat.util.res.StringManager;
 
@@ -130,6 +123,8 @@ public class AjpProcessor extends AbstractProcessor {
 
 
     // ----------------------------------------------------- Instance Variables
+
+    private final AbstractAjpProtocol<?> protocol;
 
 
     /**
@@ -237,7 +232,7 @@ public class AjpProcessor extends AbstractProcessor {
     /**
      * Finished response.
      */
-    private boolean finished = false;
+    private boolean responseFinished = false;
 
 
     /**
@@ -246,16 +241,18 @@ public class AjpProcessor extends AbstractProcessor {
     private long bytesWritten = 0;
 
 
+
+
     // ------------------------------------------------------------ Constructor
 
-    public AjpProcessor(int packetSize, AbstractEndpoint<?> endpoint) {
+    public AjpProcessor(AbstractAjpProtocol<?> protocol, Adapter adapter) {
+        super(adapter);
+        this.protocol = protocol;
 
-        super(endpoint);
-
+        int packetSize = protocol.getPacketSize();
         // Calculate maximum chunk size as packetSize may have been changed from
         // the default (Constants.MAX_PACKET_SIZE)
-        this.outputMaxChunkSize =
-                Constants.MAX_SEND_SIZE + packetSize - Constants.MAX_PACKET_SIZE;
+        this.outputMaxChunkSize = packetSize - Constants.SEND_HEAD_LEN;
 
         request.setInputBuffer(new SocketInputBuffer());
 
@@ -279,429 +276,42 @@ public class AjpProcessor extends AbstractProcessor {
     }
 
 
-    // ------------------------------------------------------------- Properties
-
-
-    /**
-     * The number of milliseconds Tomcat will wait for a subsequent request
-     * before closing the connection. The default is -1 which is an infinite
-     * timeout.
-     */
-    private int keepAliveTimeout = -1;
-    public int getKeepAliveTimeout() { return keepAliveTimeout; }
-    public void setKeepAliveTimeout(int timeout) { keepAliveTimeout = timeout; }
-
-
-    /**
-     * Use Tomcat authentication ?
-     */
-    private boolean tomcatAuthentication = true;
-    public boolean getTomcatAuthentication() { return tomcatAuthentication; }
-    public void setTomcatAuthentication(boolean tomcatAuthentication) {
-        this.tomcatAuthentication = tomcatAuthentication;
-    }
-
-
-    /**
-     * Use Tomcat authorization ?
-     */
-    private boolean tomcatAuthorization = false;
-    public boolean getTomcatAuthorization() { return tomcatAuthorization; }
-    public void setTomcatAuthorization(boolean tomcatAuthorization) {
-        this.tomcatAuthorization = tomcatAuthorization;
-    }
-
-
-    /**
-     * Required secret.
-     */
-    private String requiredSecret = null;
-    public void setRequiredSecret(String requiredSecret) {
-        this.requiredSecret = requiredSecret;
-    }
-
-
     // --------------------------------------------------------- Public Methods
 
-
-    /**
-     * Send an action to the connector.
-     *
-     * @param actionCode Type of the action
-     * @param param Action parameter
-     */
     @Override
-    public final void action(ActionCode actionCode, Object param) {
+    protected boolean flushBufferedWrite() throws IOException {
+        if (hasDataToWrite()) {
+            socketWrapper.flush(false);
+            if (hasDataToWrite()) {
+                // There is data to write but go via Response to
+                // maintain a consistent view of non-blocking state
+                response.checkRegisterForWrite();
+                return true;
+            }
+        }
+        return false;
+    }
 
-        switch (actionCode) {
-        case CLOSE: {
-            // End the processing of the current request, and stop any further
-            // transactions with the client
 
-            try {
-                finish();
-            } catch (IOException e) {
-                setErrorState(ErrorState.CLOSE_NOW, e);
-            }
-            break;
-        }
-        case COMMIT: {
-            if (response.isCommitted())
-                return;
-
-            // Validate and write response headers
-            try {
-                prepareResponse();
-            } catch (IOException e) {
-                setErrorState(ErrorState.CLOSE_NOW, e);
-            }
-
-            try {
-                flush(false);
-            } catch (IOException e) {
-                setErrorState(ErrorState.CLOSE_NOW, e);
-            }
-            break;
-        }
-        case ACK: {
-            // NO_OP for AJP
-            break;
-        }
-        case CLIENT_FLUSH: {
-            if (!response.isCommitted()) {
-                // Validate and write response headers
-                try {
-                    prepareResponse();
-                } catch (IOException e) {
-                    setErrorState(ErrorState.CLOSE_NOW, e);
-                    return;
-                }
-            }
-
-            try {
-                flush(true);
-            } catch (IOException e) {
-                setErrorState(ErrorState.CLOSE_NOW, e);
-            }
-            break;
-        }
-        case IS_ERROR: {
-            ((AtomicBoolean) param).set(getErrorState().isError());
-            break;
-        }
-        case DISABLE_SWALLOW_INPUT: {
-            // TODO: Do not swallow request input but
-            // make sure we are closing the connection
-            setErrorState(ErrorState.CLOSE_CLEAN, null);
-            break;
-        }
-        case RESET: {
-            // NO-OP
-            break;
-        }
-        case REQ_SSL_ATTRIBUTE: {
-            if (!certificates.isNull()) {
-                ByteChunk certData = certificates.getByteChunk();
-                X509Certificate jsseCerts[] = null;
-                ByteArrayInputStream bais =
-                    new ByteArrayInputStream(certData.getBytes(),
-                            certData.getStart(),
-                            certData.getLength());
-                // Fill the  elements.
-                try {
-                    CertificateFactory cf;
-                    String clientCertProvider = getClientCertProvider();
-                    if (clientCertProvider == null) {
-                        cf = CertificateFactory.getInstance("X.509");
-                    } else {
-                        cf = CertificateFactory.getInstance("X.509",
-                                clientCertProvider);
-                    }
-                    while(bais.available() > 0) {
-                        X509Certificate cert = (X509Certificate)
-                        cf.generateCertificate(bais);
-                        if(jsseCerts == null) {
-                            jsseCerts = new X509Certificate[1];
-                            jsseCerts[0] = cert;
-                        } else {
-                            X509Certificate [] temp = new X509Certificate[jsseCerts.length+1];
-                            System.arraycopy(jsseCerts,0,temp,0,jsseCerts.length);
-                            temp[jsseCerts.length] = cert;
-                            jsseCerts = temp;
-                        }
-                    }
-                } catch (java.security.cert.CertificateException e) {
-                    getLog().error(sm.getString("ajpprocessor.certs.fail"), e);
-                    return;
-                } catch (NoSuchProviderException e) {
-                    getLog().error(sm.getString("ajpprocessor.certs.fail"), e);
-                    return;
-                }
-                request.setAttribute(SSLSupport.CERTIFICATE_KEY, jsseCerts);
-            }
-            break;
-        }
-        case REQ_SSL_CERTIFICATE: {
-            // NO-OP. Can't force a new SSL handshake with the client when using
-            // AJP as the reverse proxy controls that connection.
-            break;
-        }
-        case REQ_HOST_ATTRIBUTE: {
-            // Get remote host name using a DNS resolution
-            if (request.remoteHost().isNull()) {
-                try {
-                    request.remoteHost().setString(InetAddress.getByName
-                            (request.remoteAddr().toString()).getHostName());
-                } catch (IOException iex) {
-                    // Ignore
-                }
-            }
-            break;
-        }
-        case REQ_HOST_ADDR_ATTRIBUTE: {
-            // NO-OP
-            // Automatically populated during prepareRequest()
-            break;
-        }
-        case REQ_LOCAL_NAME_ATTRIBUTE: {
-            // NO-OP
-            // Automatically populated during prepareRequest()
-            break;
-        }
-        case REQ_LOCAL_ADDR_ATTRIBUTE: {
-            // Automatically populated during prepareRequest() when using
-            // modern AJP forwarder, otherwise copy from local name
-            if (request.localAddr().isNull()) {
-                request.localAddr().setString(request.localName().toString());
-            }
-            break;
-        }
-        case REQ_REMOTEPORT_ATTRIBUTE: {
-            // NO-OP
-            // Automatically populated during prepareRequest() when using
-            // modern AJP forwarder, otherwise not available
-            break;
-        }
-        case REQ_LOCALPORT_ATTRIBUTE: {
-            // NO-OP
-            // Automatically populated during prepareRequest()
-            break;
-        }
-        case REQ_SET_BODY_REPLAY: {
-            // Set the given bytes as the content
-            ByteChunk bc = (ByteChunk) param;
-            int length = bc.getLength();
-            bodyBytes.setBytes(bc.getBytes(), bc.getStart(), length);
-            request.setContentLength(length);
-            first = false;
-            empty = false;
-            replay = true;
-            endOfStream = false;
-            break;
-        }
-        case ASYNC_START: {
-            asyncStateMachine.asyncStart((AsyncContextCallback) param);
-            break;
-        }
-        case ASYNC_COMPLETE: {
-            socketWrapper.clearDispatches();
-            if (asyncStateMachine.asyncComplete()) {
-                socketWrapper.processSocket(SocketStatus.OPEN_READ, true);
-            }
-            break;
-        }
-        case ASYNC_DISPATCH: {
-            if (asyncStateMachine.asyncDispatch()) {
-                socketWrapper.processSocket(SocketStatus.OPEN_READ, true);
-            }
-            break;
-        }
-        case ASYNC_DISPATCHED: {
-            asyncStateMachine.asyncDispatched();
-            break;
-        }
-        case ASYNC_SETTIMEOUT: {
-            if (param == null) return;
-            long timeout = ((Long)param).longValue();
-            socketWrapper.setAsyncTimeout(timeout);
-            break;
-        }
-        case ASYNC_TIMEOUT: {
-            AtomicBoolean result = (AtomicBoolean) param;
-            result.set(asyncStateMachine.asyncTimeout());
-            break;
-        }
-        case ASYNC_RUN: {
-            asyncStateMachine.asyncRun((Runnable) param);
-            break;
-        }
-        case ASYNC_ERROR: {
-            asyncStateMachine.asyncError();
-            break;
-        }
-        case ASYNC_IS_STARTED: {
-            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncStarted());
-            break;
-        }
-        case ASYNC_IS_COMPLETING: {
-            ((AtomicBoolean) param).set(asyncStateMachine.isCompleting());
-            break;
-        }
-        case ASYNC_IS_DISPATCHING: {
-            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncDispatching());
-            break;
-        }
-        case ASYNC_IS_ASYNC: {
-            ((AtomicBoolean) param).set(asyncStateMachine.isAsync());
-            break;
-        }
-        case ASYNC_IS_TIMINGOUT: {
-            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncTimingOut());
-            break;
-        }
-        case ASYNC_IS_ERROR: {
-            ((AtomicBoolean) param).set(asyncStateMachine.isAsyncError());
-            break;
-        }
-        case UPGRADE: {
-            // HTTP connections only. Unsupported for AJP.
-            throw new UnsupportedOperationException(
-                    sm.getString("ajpprocessor.httpupgrade.notsupported"));
-        }
-        case AVAILABLE: {
-            if (available()) {
-                request.setAvailable(1);
-            } else {
-                request.setAvailable(0);
-            }
-            break;
-        }
-        case NB_READ_INTEREST: {
-            if (!endOfStream) {
-                socketWrapper.registerReadInterest();
-            }
-            break;
-        }
-        case NB_WRITE_INTEREST: {
-            AtomicBoolean isReady = (AtomicBoolean)param;
-            boolean result = responseMsgPos == -1 && socketWrapper.isReadyForWrite();
-            isReady.set(result);
-            break;
-        }
-        case REQUEST_BODY_FULLY_READ: {
-            AtomicBoolean result = (AtomicBoolean) param;
-            result.set(endOfStream);
-            break;
-        }
-        case DISPATCH_READ: {
-            socketWrapper.addDispatch(DispatchType.NON_BLOCKING_READ);
-            break;
-        }
-        case DISPATCH_WRITE: {
-            socketWrapper.addDispatch(DispatchType.NON_BLOCKING_WRITE);
-            break;
-        }
-        case DISPATCH_EXECUTE: {
-            socketWrapper.executeNonBlockingDispatches();
-            break;
-        }
-        case CLOSE_NOW: {
-            // Prevent further writes to the response
-            swallowResponse = true;
-            setErrorState(ErrorState.CLOSE_NOW, null);
-            break;
-        }
-        case END_REQUEST: {
-            // NO-OP for AJP
-            break;
-        }
+    @Override
+    protected void dispatchNonBlockingRead() {
+        if (available(true) > 0) {
+            super.dispatchNonBlockingRead();
         }
     }
 
 
     @Override
-    public SocketState dispatch(SocketStatus status) {
-
-        if (status == SocketStatus.OPEN_WRITE && response.getWriteListener() != null) {
-            try {
-                asyncStateMachine.asyncOperation();
-                try {
-                    if (hasDataToWrite()) {
-                        boolean blocking = (response.getWriteListener() == null);
-                        socketWrapper.flush(blocking);
-                        if (hasDataToWrite()) {
-                            // There is data to write but go via Response to
-                            // maintain a consistent view of non-blocking state
-                            response.checkRegisterForWrite();
-                            return SocketState.LONG;
-                        }
-                    }
-                } catch (IOException x) {
-                    if (getLog().isDebugEnabled()) {
-                        getLog().debug("Unable to write async data.",x);
-                    }
-                    status = SocketStatus.ASYNC_WRITE_ERROR;
-                    request.setAttribute(RequestDispatcher.ERROR_EXCEPTION, x);
-                }
-            } catch (IllegalStateException x) {
-                socketWrapper.registerWriteInterest();
-            }
-        } else if (status == SocketStatus.OPEN_READ && request.getReadListener() != null) {
-            try {
-                if (available()) {
-                    asyncStateMachine.asyncOperation();
-                }
-            } catch (IllegalStateException x) {
-                socketWrapper.registerReadInterest();
-            }
-        }
-
-        RequestInfo rp = request.getRequestProcessor();
-        try {
-            rp.setStage(org.apache.coyote.Constants.STAGE_SERVICE);
-            if(!getAdapter().asyncDispatch(request, response, status)) {
-                setErrorState(ErrorState.CLOSE_NOW, null);
-            }
-        } catch (InterruptedIOException e) {
-            setErrorState(ErrorState.CLOSE_NOW, e);
-        } catch (Throwable t) {
-            ExceptionUtils.handleThrowable(t);
-            setErrorState(ErrorState.CLOSE_NOW, t);
-            getLog().error(sm.getString("http11processor.request.process"), t);
-        }
-
-        rp.setStage(org.apache.coyote.Constants.STAGE_ENDED);
-
-        if (isAsync()) {
-            if (getErrorState().isError()) {
-                request.updateCounters();
-                return SocketState.CLOSED;
-            } else {
-                return SocketState.LONG;
-            }
-        } else {
-            // Set keep alive timeout for next request if enabled
-            if (keepAliveTimeout > 0) {
-                socketWrapper.setReadTimeout(keepAliveTimeout);
-            }
-            request.updateCounters();
-            if (getErrorState().isError()) {
-                return SocketState.CLOSED;
-            } else {
-                return SocketState.OPEN;
-            }
-        }
+    protected SocketState dispatchEndRequest() {
+        // Set keep alive timeout for next request
+        socketWrapper.setReadTimeout(protocol.getKeepAliveTimeout());
+        recycle();
+        return SocketState.OPEN;
     }
 
 
-    /**
-     * Process pipelined HTTP requests using the specified input and output
-     * streams.
-     *
-     * @throws IOException error during an I/O operation
-     */
     @Override
-    public SocketState process(SocketWrapperBase<?> socket) throws IOException {
+    public SocketState service(SocketWrapperBase<?> socket) throws IOException {
 
         RequestInfo rp = request.getRequestProcessor();
         rp.setStage(org.apache.coyote.Constants.STAGE_PARSE);
@@ -709,27 +319,26 @@ public class AjpProcessor extends AbstractProcessor {
         // Setting up the socket
         this.socketWrapper = socket;
 
-        int soTimeout = endpoint.getSoTimeout();
         boolean cping = false;
-
         boolean keptAlive = false;
 
-        while (!getErrorState().isError() && !endpoint.isPaused()) {
+        while (!getErrorState().isError() && !protocol.isPaused()) {
             // Parsing the request header
             try {
                 // Get first message of the request
                 if (!readMessage(requestHeaderMessage, !keptAlive)) {
                     break;
                 }
-                // Set back timeout if keep alive timeout is enabled
-                if (keepAliveTimeout > 0) {
-                    socketWrapper.setReadTimeout(soTimeout);
-                }
+
+                // Processing the request so make sure the connection rather
+                // than keep-alive timeout is used
+                socketWrapper.setReadTimeout(protocol.getConnectionTimeout());
+
                 // Check message type, process right away and break if
                 // not regular request processing
                 int type = requestHeaderMessage.getByte();
                 if (type == Constants.JK_AJP13_CPING_REQUEST) {
-                    if (endpoint.isPaused()) {
+                    if (protocol.isPaused()) {
                         recycle();
                         break;
                     }
@@ -738,7 +347,7 @@ public class AjpProcessor extends AbstractProcessor {
                         socketWrapper.write(true, pongMessageArray, 0, pongMessageArray.length);
                         socketWrapper.flush(true);
                     } catch (IOException e) {
-                        setErrorState(ErrorState.CLOSE_NOW, e);
+                        setErrorState(ErrorState.CLOSE_CONNECTION_NOW, e);
                     }
                     recycle();
                     continue;
@@ -748,13 +357,13 @@ public class AjpProcessor extends AbstractProcessor {
                     if (getLog().isDebugEnabled()) {
                         getLog().debug("Unexpected message: " + type);
                     }
-                    setErrorState(ErrorState.CLOSE_NOW, null);
+                    setErrorState(ErrorState.CLOSE_CONNECTION_NOW, null);
                     break;
                 }
                 keptAlive = true;
                 request.setStartTime(System.currentTimeMillis());
             } catch (IOException e) {
-                setErrorState(ErrorState.CLOSE_NOW, e);
+                setErrorState(ErrorState.CLOSE_CONNECTION_NOW, e);
                 break;
             } catch (Throwable t) {
                 ExceptionUtils.handleThrowable(t);
@@ -780,7 +389,7 @@ public class AjpProcessor extends AbstractProcessor {
                 }
             }
 
-            if (!getErrorState().isError() && !cping && endpoint.isPaused()) {
+            if (!getErrorState().isError() && !cping && protocol.isPaused()) {
                 // 503 - Service unavailable
                 response.setStatus(503);
                 setErrorState(ErrorState.CLOSE_CLEAN, null);
@@ -794,7 +403,7 @@ public class AjpProcessor extends AbstractProcessor {
                     rp.setStage(org.apache.coyote.Constants.STAGE_SERVICE);
                     getAdapter().service(request, response);
                 } catch (InterruptedIOException e) {
-                    setErrorState(ErrorState.CLOSE_NOW, e);
+                    setErrorState(ErrorState.CLOSE_CONNECTION_NOW, e);
                 } catch (Throwable t) {
                     ExceptionUtils.handleThrowable(t);
                     getLog().error(sm.getString("ajpprocessor.request.process"), t);
@@ -810,9 +419,12 @@ public class AjpProcessor extends AbstractProcessor {
             }
 
             // Finish the response if not done yet
-            if (!finished && getErrorState().isIoAllowed()) {
+            if (!responseFinished && getErrorState().isIoAllowed()) {
                 try {
-                    finish();
+                    action(ActionCode.COMMIT, null);
+                    finishResponse();
+                } catch (IOException ioe){
+                    setErrorState(ErrorState.CLOSE_CONNECTION_NOW, ioe);
                 } catch (Throwable t) {
                     ExceptionUtils.handleThrowable(t);
                     setErrorState(ErrorState.CLOSE_NOW, t);
@@ -827,17 +439,16 @@ public class AjpProcessor extends AbstractProcessor {
             request.updateCounters();
 
             rp.setStage(org.apache.coyote.Constants.STAGE_KEEPALIVE);
-            // Set keep alive timeout for next request if enabled
-            if (keepAliveTimeout > 0) {
-                socketWrapper.setReadTimeout(keepAliveTimeout);
-            }
+
+            // Set keep alive timeout for next request
+            socketWrapper.setReadTimeout(protocol.getKeepAliveTimeout());
 
             recycle();
         }
 
         rp.setStage(org.apache.coyote.Constants.STAGE_ENDED);
 
-        if (getErrorState().isError() || endpoint.isPaused()) {
+        if (getErrorState().isError() || protocol.isPaused()) {
             return SocketState.CLOSED;
         } else {
             if (isAsync()) {
@@ -850,42 +461,26 @@ public class AjpProcessor extends AbstractProcessor {
 
 
     @Override
-    public void setSslSupport(SSLSupport sslSupport) {
-        if (sslSupport != null) {
-            // Should never reach this code but in case we do...
-            throw new IllegalStateException(
-                    sm.getString("ajpprocessor.ssl.notsupported"));
-        }
-    }
-
-
-    @Override
-    public HttpUpgradeHandler getHttpUpgradeHandler() {
-        // Should never reach this code but in case we do...
-        throw new IllegalStateException(
-                sm.getString("ajpprocessor.httpupgrade.notsupported"));
-    }
-
-
-    @Override
     public void recycle() {
         getAdapter().checkRecycled(request, response);
-
-        asyncStateMachine.recycle();
-
-        // Recycle Request object
+        super.recycle();
+        request.recycle();
+        response.recycle();
         first = true;
         endOfStream = false;
         waitingForBodyMessage = false;
         empty = true;
         replay = false;
-        finished = false;
-        request.recycle();
-        response.recycle();
+        responseFinished = false;
         certificates.recycle();
         swallowResponse = false;
         bytesWritten = 0;
-        resetErrorState();
+    }
+
+
+    @Override
+    public void pause() {
+        // NOOP for AJP
     }
 
 
@@ -973,24 +568,13 @@ public class AjpProcessor extends AbstractProcessor {
     }
 
 
-    @Override
-    public final boolean isUpgrade() {
-        // AJP does not support HTTP upgrade
-        return false;
-    }
-
-
-    @Override
-    public ByteBuffer getLeftoverInput() {
-        return null;
-    }
-
-
     /**
      * Get more request body data from the web server and store it in the
      * internal buffer.
-     *
-     * @return true if there is more data, false if not.
+     * @param block <code>true</code> if this is blocking IO
+     * @return <code>true</code> if there is more data,
+     *  <code>false</code> if not.
+     * @throws IOException An IO error occurred
      */
     protected boolean refillReadBuffer(boolean block) throws IOException {
         // When using replay (e.g. after FORM auth) all the data to read has
@@ -1062,7 +646,7 @@ public class AjpProcessor extends AbstractProcessor {
         MimeHeaders headers = request.getMimeHeaders();
 
         // Set this every time in case limit has been changed via JMX
-        headers.setLimit(endpoint.getMaxHeaderCount());
+        headers.setLimit(protocol.getMaxHeaderCount());
 
         boolean contentLengthSet = false;
         int hCount = requestHeaderMessage.getInt();
@@ -1119,6 +703,7 @@ public class AjpProcessor extends AbstractProcessor {
         }
 
         // Decode extra attributes
+        String requiredSecret = protocol.getRequiredSecret();
         boolean secret = false;
         byte attributeCode;
         while ((attributeCode = requestHeaderMessage.getByte())
@@ -1164,7 +749,8 @@ public class AjpProcessor extends AbstractProcessor {
                 break;
 
             case Constants.SC_A_REMOTE_USER :
-                if (tomcatAuthorization || !tomcatAuthentication) {
+                boolean tomcatAuthorization  = protocol.getTomcatAuthorization();
+                if (tomcatAuthorization || !protocol.getTomcatAuthentication()) {
                     // Implies tomcatAuthentication == false
                     requestHeaderMessage.getBytes(request.getRemoteUser());
                     request.setRemoteUserNeedsAuthorization(tomcatAuthorization);
@@ -1175,7 +761,7 @@ public class AjpProcessor extends AbstractProcessor {
                 break;
 
             case Constants.SC_A_AUTH_TYPE :
-                if (tomcatAuthentication) {
+                if (protocol.getTomcatAuthentication()) {
                     // ignore server
                     requestHeaderMessage.getBytes(tmpMB);
                 } else {
@@ -1188,7 +774,8 @@ public class AjpProcessor extends AbstractProcessor {
                 break;
 
             case Constants.SC_A_JVM_ROUTE :
-                requestHeaderMessage.getBytes(request.instanceId());
+                requestHeaderMessage.getBytes(tmpMB);
+                // nothing
                 break;
 
             case Constants.SC_A_SSL_CERT :
@@ -1320,13 +907,6 @@ public class AjpProcessor extends AbstractProcessor {
         }
 
         if (colonPos < 0) {
-            if (request.scheme().equalsIgnoreCase("https")) {
-                // 443 - Default HTTPS port
-                request.setServerPort(443);
-            } else {
-                // 80 - Default HTTTP port
-                request.setServerPort(80);
-            }
             request.serverName().setChars(hostNameC, 0, valueL);
         } else {
 
@@ -1355,7 +935,8 @@ public class AjpProcessor extends AbstractProcessor {
      * When committing the response, we have to validate the set of headers, as
      * well as setup the response filters.
      */
-    private void prepareResponse() throws IOException {
+    @Override
+    protected final void prepareResponse() throws IOException {
 
         response.setCommitted(true);
 
@@ -1383,20 +964,9 @@ public class AjpProcessor extends AbstractProcessor {
 
         // HTTP header contents
         responseMessage.appendInt(statusCode);
-        String message = null;
-        if (org.apache.coyote.Constants.USE_CUSTOM_STATUS_MSG_IN_HEADER &&
-                HttpMessages.isSafeInHttpHeader(response.getMessage())) {
-            message = response.getMessage();
-        }
-        if (message == null){
-            message = HttpMessages.getInstance(
-                    response.getLocale()).getMessage(response.getStatus());
-        }
-        if (message == null) {
-            // mod_jk + httpd 2.x fails with a null status message - bug 45026
-            message = Integer.toString(response.getStatus());
-        }
-        tmpMB.setString(message);
+        // Reason phrase is optional but mod_jk + httpd 2.x fails with a null
+        // reason phrase - bug 45026
+        tmpMB.setString(Integer.toString(response.getStatus()));
         responseMessage.appendBytes(tmpMB);
 
         // Special headers
@@ -1440,13 +1010,16 @@ public class AjpProcessor extends AbstractProcessor {
     /**
      * Callback to write data from the buffer.
      */
-    private void flush(boolean explicit) throws IOException {
+    @Override
+    protected final void flush() throws IOException {
         // Calling code should ensure that there is no data in the buffers for
         // non-blocking writes.
         // TODO Validate the assertion above
-        if (explicit && !finished) {
-            // Send the flush message
-            socketWrapper.write(true, flushMessageArray, 0, flushMessageArray.length);
+        if (!responseFinished) {
+            if (protocol.getAjpFlush()) {
+                // Send the flush message
+                socketWrapper.write(true, flushMessageArray, 0, flushMessageArray.length);
+            }
             socketWrapper.flush(true);
         }
     }
@@ -1455,22 +1028,12 @@ public class AjpProcessor extends AbstractProcessor {
     /**
      * Finish AJP response.
      */
-    private void finish() throws IOException {
-
-        if (!response.isCommitted()) {
-            // Validate and write response headers
-            try {
-                prepareResponse();
-            } catch (IOException e) {
-                setErrorState(ErrorState.CLOSE_NOW, e);
-                return;
-            }
-        }
-
-        if (finished)
+    @Override
+    protected final void finishResponse() throws IOException {
+        if (responseFinished)
             return;
 
-        finished = true;
+        responseFinished = true;
 
         // Swallow the unread body packet if present
         if (waitingForBodyMessage || first && request.getContentLengthLong() > 0) {
@@ -1487,21 +1050,152 @@ public class AjpProcessor extends AbstractProcessor {
     }
 
 
-    private boolean available() {
+    @Override
+    protected final void ack() {
+        // NO-OP for AJP
+    }
+
+
+    @Override
+    protected final int available(boolean doRead) {
         if (endOfStream) {
-            return false;
+            return 0;
         }
-        if (empty) {
+        if (empty && doRead) {
             try {
                 refillReadBuffer(false);
             } catch (IOException timeout) {
                 // Not ideal. This will indicate that data is available
                 // which should trigger a read which in turn will trigger
                 // another IOException and that one can be thrown.
-                return true;
+                return 1;
             }
         }
-        return !empty;
+        if (empty) {
+            return 0;
+        } else {
+            return bodyBytes.getByteChunk().getLength();
+        }
+    }
+
+
+    @Override
+    protected final void setRequestBody(ByteChunk body) {
+        int length = body.getLength();
+        bodyBytes.setBytes(body.getBytes(), body.getStart(), length);
+        request.setContentLength(length);
+        first = false;
+        empty = false;
+        replay = true;
+        endOfStream = false;
+    }
+
+
+    @Override
+    protected final void setSwallowResponse() {
+        swallowResponse = true;
+    }
+
+
+    @Override
+    protected final void disableSwallowRequest() {
+        /* NO-OP
+         * With AJP, Tomcat controls when the client sends request body data. At
+         * most there will be a single packet to read and that will be handled
+         * in finishResponse().
+         */
+    }
+
+
+    @Override
+    protected final boolean getPopulateRequestAttributesFromSocket() {
+        // NO-OPs the attribute requests since they are pre-populated when
+        // parsing the first AJP message.
+        return false;
+    }
+
+
+    @Override
+    protected final void populateRequestAttributeRemoteHost() {
+        // Get remote host name using a DNS resolution
+        if (request.remoteHost().isNull()) {
+            try {
+                request.remoteHost().setString(InetAddress.getByName
+                        (request.remoteAddr().toString()).getHostName());
+            } catch (IOException iex) {
+                // Ignore
+            }
+        }
+    }
+
+
+    @Override
+    protected final void populateSslRequestAttributes() {
+        if (!certificates.isNull()) {
+            ByteChunk certData = certificates.getByteChunk();
+            X509Certificate jsseCerts[] = null;
+            ByteArrayInputStream bais =
+                new ByteArrayInputStream(certData.getBytes(),
+                        certData.getStart(),
+                        certData.getLength());
+            // Fill the  elements.
+            try {
+                CertificateFactory cf;
+                String clientCertProvider = protocol.getClientCertProvider();
+                if (clientCertProvider == null) {
+                    cf = CertificateFactory.getInstance("X.509");
+                } else {
+                    cf = CertificateFactory.getInstance("X.509",
+                            clientCertProvider);
+                }
+                while(bais.available() > 0) {
+                    X509Certificate cert = (X509Certificate)
+                    cf.generateCertificate(bais);
+                    if(jsseCerts == null) {
+                        jsseCerts = new X509Certificate[1];
+                        jsseCerts[0] = cert;
+                    } else {
+                        X509Certificate [] temp = new X509Certificate[jsseCerts.length+1];
+                        System.arraycopy(jsseCerts,0,temp,0,jsseCerts.length);
+                        temp[jsseCerts.length] = cert;
+                        jsseCerts = temp;
+                    }
+                }
+            } catch (java.security.cert.CertificateException e) {
+                getLog().error(sm.getString("ajpprocessor.certs.fail"), e);
+                return;
+            } catch (NoSuchProviderException e) {
+                getLog().error(sm.getString("ajpprocessor.certs.fail"), e);
+                return;
+            }
+            request.setAttribute(SSLSupport.CERTIFICATE_KEY, jsseCerts);
+        }
+    }
+
+
+    @Override
+    protected final boolean isRequestBodyFullyRead() {
+        return endOfStream;
+    }
+
+
+    @Override
+    protected final void registerReadInterest() {
+        socketWrapper.registerReadInterest();
+    }
+
+
+    @Override
+    protected final boolean isReady() {
+        return responseMsgPos == -1 && socketWrapper.isReadyForWrite();
+    }
+
+
+    @Override
+    protected boolean isTrailerFieldsReady() {
+        // AJP does not support trailers so return true so app can request the
+        // trailers and find out that there are none.
+        return true;
     }
 
 
@@ -1533,27 +1227,28 @@ public class AjpProcessor extends AbstractProcessor {
                 left = left - read;
                 start = start + read;
             }
+        } else if (read == -1) {
+            throw new EOFException();
         }
 
         return read > 0;
     }
 
 
-    private void writeData(ByteChunk chunk) throws IOException {
+    private void writeData(ByteBuffer chunk) throws IOException {
         boolean blocking = (response.getWriteListener() == null);
 
-        int len = chunk.getLength();
+        int len = chunk.remaining();
         int off = 0;
 
         // Write this chunk
         while (len > 0) {
-            int thisTime = len;
-            if (thisTime > outputMaxChunkSize) {
-                thisTime = outputMaxChunkSize;
-            }
+            int thisTime = Math.min(len, outputMaxChunkSize);
+
             responseMessage.reset();
             responseMessage.appendByte(Constants.JK_AJP13_SEND_BODY_CHUNK);
-            responseMessage.appendBytes(chunk.getBytes(), chunk.getOffset() + off, thisTime);
+            chunk.limit(chunk.position() + thisTime);
+            responseMessage.appendBytes(chunk);
             responseMessage.end();
             socketWrapper.write(blocking, responseMessage.getBuffer(), 0, responseMessage.getLen());
             socketWrapper.flush(blocking);
@@ -1585,11 +1280,8 @@ public class AjpProcessor extends AbstractProcessor {
      */
     protected class SocketInputBuffer implements InputBuffer {
 
-        /**
-         * Read bytes into the specified chunk.
-         */
         @Override
-        public int doRead(ByteChunk chunk, Request req) throws IOException {
+        public int doRead(ApplicationBufferHandler handler) throws IOException {
 
             if (endOfStream) {
                 return -1;
@@ -1600,9 +1292,9 @@ public class AjpProcessor extends AbstractProcessor {
                 }
             }
             ByteChunk bc = bodyBytes.getByteChunk();
-            chunk.setBytes(bc.getBuffer(), bc.getStart(), bc.getLength());
+            handler.setByteBuffer(ByteBuffer.wrap(bc.getBuffer(), bc.getStart(), bc.getLength()));
             empty = true;
-            return chunk.getLength();
+            return handler.getByteBuffer().remaining();
         }
     }
 
@@ -1616,21 +1308,30 @@ public class AjpProcessor extends AbstractProcessor {
     protected class SocketOutputBuffer implements OutputBuffer {
 
         @Override
-        public int doWrite(ByteChunk chunk) throws IOException {
+        public int doWrite(ByteBuffer chunk) throws IOException {
 
             if (!response.isCommitted()) {
                 // Validate and write response headers
                 try {
                     prepareResponse();
                 } catch (IOException e) {
-                    setErrorState(ErrorState.CLOSE_NOW, e);
+                    setErrorState(ErrorState.CLOSE_CONNECTION_NOW, e);
                 }
             }
 
+            int len = 0;
             if (!swallowResponse) {
-                writeData(chunk);
+                try {
+                    len = chunk.remaining();
+                    writeData(chunk);
+                    len -= chunk.remaining();
+                } catch (IOException ioe) {
+                    setErrorState(ErrorState.CLOSE_CONNECTION_NOW, ioe);
+                    // Re-throw
+                    throw ioe;
+                }
             }
-            return chunk.getLength();
+            return len;
         }
 
         @Override

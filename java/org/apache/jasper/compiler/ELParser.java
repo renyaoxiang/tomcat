@@ -106,11 +106,17 @@ public class ELParser {
         ELexpr = new ELNode.Nodes();
         curToken = null;
         prevToken = null;
+        int openBraces = 0;
         while (hasNext()) {
             curToken = nextToken();
             if (curToken instanceof Char) {
                 if (curToken.toChar() == '}') {
-                    break;
+                    openBraces--;
+                    if (openBraces < 0) {
+                        break;
+                    }
+                } else if (curToken.toChar() == '{') {
+                    openBraces++;
                 }
                 buf.append(curToken.toString());
             } else {
@@ -205,11 +211,9 @@ public class ELParser {
         while (hasNextChar()) {
             char ch = nextChar();
             if (ch == '\\') {
-                // Is this the start of a "\${" or "\#{" escape sequence?
+                // Is this the start of a "\$" or "\#" escape sequence?
                 char p0 = peek(0);
-                char p1 = peek(1);
-                if ((p0 == '$' || (p0 == '#' && !isDeferredSyntaxAllowedAsLiteral)) && p1 == '{') {
-                    buf.append(nextChar());
+                if (p0 == '$' || (p0 == '#' && !isDeferredSyntaxAllowedAsLiteral)) {
                     buf.append(nextChar());
                 } else {
                     buf.append(ch);
@@ -229,7 +233,8 @@ public class ELParser {
 
     /**
      * Escape '$' and '#', inverting the unescaping performed in
-     * {@link #skipUntilEL()}.
+     * {@link #skipUntilEL()} but only for ${ and #{ sequences since escaping
+     * for $ and # is optional.
      *
      * @param input Non-EL input to be escaped
      * @param isDeferredSyntaxAllowedAsLiteral

@@ -25,6 +25,11 @@ import java.io.PrintWriter;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.URL;
+import java.nio.file.FileVisitResult;
+import java.nio.file.FileVisitor;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
@@ -37,8 +42,6 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 
-import static org.junit.Assert.fail;
-
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -50,17 +53,21 @@ import org.apache.catalina.LifecycleState;
 import org.apache.catalina.Manager;
 import org.apache.catalina.Server;
 import org.apache.catalina.Service;
+import org.apache.catalina.Session;
 import org.apache.catalina.WebResourceRoot;
 import org.apache.catalina.connector.Connector;
 import org.apache.catalina.core.AprLifecycleListener;
 import org.apache.catalina.core.StandardServer;
 import org.apache.catalina.session.ManagerBase;
 import org.apache.catalina.session.StandardManager;
+import org.apache.catalina.util.IOTools;
 import org.apache.catalina.valves.AccessLogValve;
 import org.apache.catalina.webresources.StandardRoot;
 import org.apache.coyote.http11.Http11NioProtocol;
 import org.apache.tomcat.util.buf.ByteChunk;
-import org.apache.tomcat.websocket.CaseInsensitiveKeyMap;
+import org.apache.tomcat.util.collections.CaseInsensitiveKeyMap;
+import org.apache.tomcat.util.scan.StandardJarScanFilter;
+import org.apache.tomcat.util.scan.StandardJarScanner;
 
 /**
  * Base test case that provides a Tomcat instance for each test - mainly so we
@@ -98,6 +105,11 @@ public abstract class TomcatBaseTest extends LoggingBaseTest {
             throws LifecycleException {
         File appDir = new File("test/webapp");
         Context ctx = tomcat.addWebapp(null, "/test", appDir.getAbsolutePath());
+
+        StandardJarScanner scanner = (StandardJarScanner) ctx.getJarScanner();
+        StandardJarScanFilter filter = (StandardJarScanFilter) scanner.getJarScanFilter();
+        filter.setTldSkip(filter.getTldSkip() + ",testclasses");
+        filter.setPluggabilitySkip(filter.getPluggabilitySkip() + ",testclasses");
 
         if (addJstl) {
             File lib = new File("webapps/examples/WEB-INF/lib");
@@ -137,7 +149,7 @@ public abstract class TomcatBaseTest extends LoggingBaseTest {
 
         File appBase = new File(getTemporaryDirectory(), "webapps");
         if (!appBase.exists() && !appBase.mkdir()) {
-            fail("Unable to create appBase for test");
+            Assert.fail("Unable to create appBase for test");
         }
 
         tomcat = new TomcatWithFastSessionIDs();
@@ -439,11 +451,12 @@ public abstract class TomcatBaseTest extends LoggingBaseTest {
             StringBuilder value;
             Object attribute;
 
+            response.setContentType("text/plain");
+            response.setCharacterEncoding("UTF-8");
+
             ServletContext ctx = this.getServletContext();
             HttpSession session = request.getSession(false);
             PrintWriter out = response.getWriter();
-
-            response.setContentType("text/plain");
 
             out.println("CONTEXT-NAME: " + ctx.getServletContextName());
             out.println("CONTEXT-PATH: " + ctx.getContextPath());
@@ -489,7 +502,7 @@ public abstract class TomcatBaseTest extends LoggingBaseTest {
             out.println("REQUEST-CHARACTER-ENCODING: " +
                         request.getCharacterEncoding());
             out.println("REQUEST-CONTENT-LENGTH: " +
-                        request.getContentLength());
+                        request.getContentLengthLong());
             out.println("REQUEST-CONTENT-TYPE: " + request.getContentType());
             out.println("REQUEST-LOCALE: " + request.getLocale());
 
@@ -592,14 +605,9 @@ public abstract class TomcatBaseTest extends LoggingBaseTest {
                 throws ServletException, IOException {
             // Beware of clients that try to send the whole request body before
             // reading any of the response. They may cause this test to lock up.
-            byte[] buffer = new byte[8096];
-            int read = 0;
             try (InputStream is = req.getInputStream();
                     OutputStream os = resp.getOutputStream()) {
-                while (read > -1) {
-                    os.write(buffer, 0, read);
-                    read = is.read(buffer);
-                }
+                IOTools.flow(is, os);
             }
         }
     }
@@ -642,8 +650,7 @@ public abstract class TomcatBaseTest extends LoggingBaseTest {
             String method) throws IOException {
 
         URL url = new URL(path);
-        HttpURLConnection connection =
-            (HttpURLConnection) url.openConnection();
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setUseCaches(false);
         connection.setReadTimeout(readTimeout);
         connection.setRequestMethod(method);
@@ -817,6 +824,60 @@ public abstract class TomcatBaseTest extends LoggingBaseTest {
                 }
             }
             super.start();
+        }
+    }
+
+
+    public static void recursiveCopy(final Path src, final Path dest)
+            throws IOException {
+
+        Files.walkFileTree(src, new FileVisitor<Path>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir,
+                    BasicFileAttributes attrs) throws IOException {
+                Files.copy(dir, dest.resolve(src.relativize(dir)));
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file,
+                    BasicFileAttributes attrs) throws IOException {
+                Path destPath = dest.resolve(src.relativize(file));
+                Files.copy(file, destPath);
+                // Make sure that HostConfig thinks all newly copied files have
+                // been modified.
+                Assert.assertTrue("Failed to set last modified for [" + destPath + "]",
+                        destPath.toFile().setLastModified(
+                        System.currentTimeMillis() - 2 * HostConfig.FILE_MODIFICATION_RESOLUTION_MS));
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFileFailed(Path file, IOException ioe)
+                    throws IOException {
+                throw ioe;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path dir, IOException ioe)
+                    throws IOException {
+                // NO-OP
+                return FileVisitResult.CONTINUE;
+            }});
+    }
+
+
+    public static void skipTldsForResourceJars(Context context) {
+        StandardJarScanner scanner = (StandardJarScanner) context.getJarScanner();
+        StandardJarScanFilter filter = (StandardJarScanFilter) scanner.getJarScanFilter();
+        filter.setTldSkip(filter.getTldSkip() + ",resources*.jar");
+    }
+
+
+    public static void forceSessionMaxInactiveInterval(Context context, int newIntervalSecs) {
+        Session[] sessions = context.getManager().findSessions();
+        for (Session session : sessions) {
+            session.setMaxInactiveInterval(newIntervalSecs);
         }
     }
 }

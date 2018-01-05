@@ -29,17 +29,26 @@ import org.apache.tomcat.util.res.StringManager;
 /**
  * Base class for filters that provides generic initialisation and a simple
  * no-op destruction.
- *
- * @author xxd
- *
  */
 public abstract class FilterBase implements Filter {
 
-    protected static final StringManager sm =
-        StringManager.getManager(Constants.Package);
+    protected static final StringManager sm = StringManager.getManager(FilterBase.class);
 
     protected abstract Log getLogger();
 
+
+    /**
+     * Iterates over the configuration parameters and either logs a warning,
+     * or throws an exception for any parameter that does not have a matching
+     * setter in this filter.
+     *
+     * @param filterConfig The configuration information associated with the
+     *                     filter instance being initialised
+     *
+     * @throws ServletException if {@link #isConfigProblemFatal()} returns
+     *                          {@code true} and a configured parameter does not
+     *                          have a matching setter
+     */
     @Override
     public void init(FilterConfig filterConfig) throws ServletException {
         Enumeration<String> paramNames = filterConfig.getInitParameterNames();
@@ -56,11 +65,6 @@ public abstract class FilterBase implements Filter {
                 }
             }
         }
-    }
-
-    @Override
-    public void destroy() {
-        // NOOP
     }
 
     /**

@@ -14,39 +14,34 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  */
-
 package org.apache.tomcat.util.net;
 
+import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.channels.CancelledKeyException;
 import java.nio.channels.FileChannel;
+import java.nio.channels.NetworkChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.WritableByteChannel;
+import java.util.ConcurrentModificationException;
 import java.util.Iterator;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executor;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
-import javax.net.ssl.KeyManager;
-import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLSession;
-import javax.net.ssl.SSLSessionContext;
-import javax.net.ssl.X509KeyManager;
 
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
@@ -56,7 +51,6 @@ import org.apache.tomcat.util.collections.SynchronizedQueue;
 import org.apache.tomcat.util.collections.SynchronizedStack;
 import org.apache.tomcat.util.net.AbstractEndpoint.Handler.SocketState;
 import org.apache.tomcat.util.net.jsse.JSSESupport;
-import org.apache.tomcat.util.net.jsse.NioX509KeyManager;
 
 /**
  * NIO tailored thread pool, providing the following services:
@@ -72,7 +66,7 @@ import org.apache.tomcat.util.net.jsse.NioX509KeyManager;
  * @author Mladen Turk
  * @author Remy Maucherat
  */
-public class NioEndpoint extends AbstractEndpoint<NioChannel> {
+public class NioEndpoint extends AbstractJsseEndpoint<NioChannel,SocketChannel> {
 
 
     // -------------------------------------------------------------- Constants
@@ -93,36 +87,9 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
     private ServerSocketChannel serverSock = null;
 
     /**
-     * The size of the OOM parachute.
-     */
-    private int oomParachute = 1024*1024;
-    /**
-     * The oom parachute, when an OOM error happens,
-     * will release the data, giving the JVM instantly
-     * a chunk of data to be able to recover with.
-     */
-    private byte[] oomParachuteData = null;
-
-    /**
-     * Make sure this string has already been allocated
-     */
-    private static final String oomParachuteMsg =
-        "SEVERE:Memory usage is low, parachute is non existent, your system may start failing.";
-
-    /**
-     * Keep track of OOM warning messages.
-     */
-    private long lastParachuteCheck = System.currentTimeMillis();
-
-    /**
      *
      */
     private volatile CountDownLatch stopLatch = null;
-
-    /**
-     * Cache for SocketProcessor objects
-     */
-    private SynchronizedStack<SocketProcessor> processorCache;
 
     /**
      * Cache for poller events
@@ -166,14 +133,6 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
 
 
     /**
-     * Handling of accepted sockets.
-     */
-    private Handler handler = null;
-    public void setHandler(Handler handler ) { this.handler = handler; }
-    public Handler getHandler() { return handler; }
-
-
-    /**
      * Poller thread count.
      */
     private int pollerThreadCount = Math.min(2,Runtime.getRuntime().availableProcessors());
@@ -184,7 +143,7 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
     public void setSelectorTimeout(long timeout){ this.selectorTimeout = timeout;}
     public long getSelectorTimeout(){ return this.selectorTimeout; }
     /**
-     * The socket poller.
+     * The socket pollers.
      */
     private Poller[] pollers = null;
     private AtomicInteger pollerRotater = new AtomicInteger(0);
@@ -203,10 +162,6 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
         this.selectorPool = selectorPool;
     }
 
-    public void setSocketProperties(SocketProperties socketProperties) {
-        this.socketProperties = socketProperties;
-    }
-
     /**
      * Is deferAccept supported?
      */
@@ -216,80 +171,6 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
         return false;
     }
 
-    public void setOomParachute(int oomParachute) {
-        this.oomParachute = oomParachute;
-    }
-
-    public void setOomParachuteData(byte[] oomParachuteData) {
-        this.oomParachuteData = oomParachuteData;
-    }
-
-
-    private SSLImplementation sslImplementation = null;
-    private SSLContext sslContext = null;
-    public SSLContext getSSLContext() { return sslContext;}
-    public void setSSLContext(SSLContext c) { sslContext = c;}
-    private String[] enabledCiphers;
-    private String[] enabledProtocols;
-
-    /**
-     * Port in use.
-     */
-    @Override
-    public int getLocalPort() {
-        ServerSocketChannel ssc = serverSock;
-        if (ssc == null) {
-            return -1;
-        } else {
-            ServerSocket s = ssc.socket();
-            if (s == null) {
-                return -1;
-            } else {
-                return s.getLocalPort();
-            }
-        }
-    }
-
-
-    public SSLImplementation getSslImplementation() {
-        return sslImplementation;
-    }
-
-
-    @Override
-    public String[] getCiphersUsed() {
-        return enabledCiphers;
-    }
-
-
-    // --------------------------------------------------------- OOM Parachute Methods
-
-    protected void checkParachute() {
-        boolean para = reclaimParachute(false);
-        if (!para && (System.currentTimeMillis()-lastParachuteCheck)>10000) {
-            try {
-                log.fatal(oomParachuteMsg);
-            }catch (Throwable t) {
-                ExceptionUtils.handleThrowable(t);
-                System.err.println(oomParachuteMsg);
-            }
-            lastParachuteCheck = System.currentTimeMillis();
-        }
-    }
-
-    protected boolean reclaimParachute(boolean force) {
-        if ( oomParachuteData != null ) return true;
-        if ( oomParachute > 0 && ( force || (Runtime.getRuntime().freeMemory() > (oomParachute*2))) )
-            oomParachuteData = new byte[oomParachute];
-        return oomParachuteData != null;
-    }
-
-    protected void releaseCaches() {
-        this.nioChannels.clear();
-        this.processorCache.clear();
-        if ( handler != null ) handler.recycle();
-
-    }
 
     // --------------------------------------------------------- Public Methods
     /**
@@ -313,19 +194,12 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
 
     // ----------------------------------------------- Public Lifecycle Methods
 
-
     /**
      * Initialize the endpoint.
      */
     @Override
     public void bind() throws Exception {
-
-        serverSock = ServerSocketChannel.open();
-        socketProperties.setProperties(serverSock.socket());
-        InetSocketAddress addr = (getAddress()!=null?new InetSocketAddress(getAddress(),getPort()):new InetSocketAddress(getPort()));
-        serverSock.socket().bind(addr,getBacklog());
-        serverSock.configureBlocking(true); //mimic APR behavior
-        serverSock.socket().setSoTimeout(getSocketProperties().getSoTimeout());
+        initServerSocket();
 
         // Initialize thread count defaults for acceptor, poller
         if (acceptorThreadCount == 0) {
@@ -336,42 +210,22 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
             //minimum one poller thread
             pollerThreadCount = 1;
         }
-        stopLatch = new CountDownLatch(pollerThreadCount);
+        setStopLatch(new CountDownLatch(pollerThreadCount));
 
         // Initialize SSL if needed
-        if (isSSLEnabled()) {
-            sslImplementation = SSLImplementation.getInstance(getSslImplementationName());
-            SSLUtil sslUtil = sslImplementation.getSSLUtil(this);
+        initialiseSsl();
 
-            sslContext = sslUtil.createSSLContext();
-            sslContext.init(wrap(sslUtil.getKeyManagers()),
-                    sslUtil.getTrustManagers(), null);
-
-            SSLSessionContext sessionContext =
-                sslContext.getServerSessionContext();
-            if (sessionContext != null) {
-                sslUtil.configureSessionContext(sessionContext);
-            }
-            // Determine which cipher suites and protocols to enable
-            enabledCiphers = sslUtil.getEnableableCiphers(sslContext);
-            enabledProtocols = sslUtil.getEnableableProtocols(sslContext);
-        }
-
-        if (oomParachute>0) reclaimParachute(true);
         selectorPool.open();
     }
 
-    public KeyManager[] wrap(KeyManager[] managers) {
-        if (managers==null) return null;
-        KeyManager[] result = new KeyManager[managers.length];
-        for (int i=0; i<result.length; i++) {
-            if (managers[i] instanceof X509KeyManager && getKeyAlias()!=null) {
-                result[i] = new NioX509KeyManager((X509KeyManager)managers[i],getKeyAlias());
-            } else {
-                result[i] = managers[i];
-            }
-        }
-        return result;
+    // Separated out to make it easier for folks that extend NioEndpoint to
+    // implement custom [server]sockets
+    protected void initServerSocket() throws Exception {
+        serverSock = ServerSocketChannel.open();
+        socketProperties.setProperties(serverSock.socket());
+        InetSocketAddress addr = (getAddress()!=null?new InetSocketAddress(getAddress(),getPort()):new InetSocketAddress(getPort()));
+        serverSock.socket().bind(addr,getAcceptCount());
+        serverSock.configureBlocking(true); //mimic APR behavior
     }
 
 
@@ -419,28 +273,28 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
      */
     @Override
     public void stopInternal() {
-        releaseConnectionLatch();
         if (!paused) {
             pause();
         }
         if (running) {
             running = false;
-            unlockAccept();
             for (int i=0; pollers!=null && i<pollers.length; i++) {
                 if (pollers[i]==null) continue;
                 pollers[i].destroy();
                 pollers[i] = null;
             }
             try {
-                stopLatch.await(selectorTimeout + 100, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException ignore) {
+                if (!getStopLatch().await(selectorTimeout + 100, TimeUnit.MILLISECONDS)) {
+                    log.warn(sm.getString("endpoint.nio.stopLatchAwaitFail"));
+                }
+            } catch (InterruptedException e) {
+                log.warn(sm.getString("endpoint.nio.stopLatchAwaitInterrupted"), e);
             }
             shutdownExecutor();
             eventCache.clear();
             nioChannels.clear();
             processorCache.clear();
         }
-
     }
 
 
@@ -459,8 +313,11 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
         serverSock.socket().close();
         serverSock.close();
         serverSock = null;
-        sslContext = null;
-        releaseCaches();
+        destroySsl();
+        super.unbind();
+        if (getHandler() != null ) {
+            getHandler().recycle();
+        }
         selectorPool.close();
         if (log.isDebugEnabled()) {
             log.debug("Destroy completed for "+new InetSocketAddress(getAddress(),getPort()));
@@ -470,37 +327,29 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
 
     // ------------------------------------------------------ Protected Methods
 
-
-    public int getWriteBufSize() {
-        return socketProperties.getTxBufSize();
-    }
-
-    public int getReadBufSize() {
-        return socketProperties.getRxBufSize();
-    }
-
     public NioSelectorPool getSelectorPool() {
         return selectorPool;
     }
 
-    public int getOomParachute() {
-        return oomParachute;
-    }
 
-    public byte[] getOomParachuteData() {
-        return oomParachuteData;
+    protected CountDownLatch getStopLatch() {
+        return stopLatch;
     }
 
 
-    @Override
-    protected AbstractEndpoint.Acceptor createAcceptor() {
-        return new Acceptor();
+    protected void setStopLatch(CountDownLatch stopLatch) {
+        this.stopLatch = stopLatch;
     }
 
 
     /**
      * Process the specified connection.
+     * @param socket The socket channel
+     * @return <code>true</code> if the socket was correctly configured
+     *  and processing may continue, <code>false</code> if the socket needs to be
+     *  close immediately
      */
+    @Override
     protected boolean setSocketOptions(SocketChannel socket) {
         // Process the connection
         try {
@@ -510,32 +359,19 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
             socketProperties.setProperties(sock);
 
             NioChannel channel = nioChannels.pop();
-            if ( channel == null ) {
-                // SSL setup
-                if (sslContext != null) {
-                    SSLEngine engine = createSSLEngine();
-                    int appbufsize = engine.getSession().getApplicationBufferSize();
-                    SocketBufferHandler bufhandler = new SocketBufferHandler(
-                            Math.max(appbufsize,socketProperties.getAppReadBufSize()),
-                            Math.max(appbufsize,socketProperties.getAppWriteBufSize()),
-                            socketProperties.getDirectBuffer());
-                    channel = new SecureNioChannel(socket, engine, bufhandler, selectorPool);
+            if (channel == null) {
+                SocketBufferHandler bufhandler = new SocketBufferHandler(
+                        socketProperties.getAppReadBufSize(),
+                        socketProperties.getAppWriteBufSize(),
+                        socketProperties.getDirectBuffer());
+                if (isSSLEnabled()) {
+                    channel = new SecureNioChannel(socket, bufhandler, selectorPool, this);
                 } else {
-                    // normal tcp setup
-                    SocketBufferHandler bufhandler = new SocketBufferHandler(
-                            socketProperties.getAppReadBufSize(),
-                            socketProperties.getAppWriteBufSize(),
-                            socketProperties.getDirectBuffer());
                     channel = new NioChannel(socket, bufhandler);
                 }
             } else {
                 channel.setIOChannel(socket);
-                if ( channel instanceof SecureNioChannel ) {
-                    SSLEngine engine = createSSLEngine();
-                    ((SecureNioChannel)channel).reset(engine);
-                } else {
-                    channel.reset();
-                }
+                channel.reset();
             }
             getPoller0().register(channel);
         } catch (Throwable t) {
@@ -543,7 +379,7 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
             try {
                 log.error("",t);
             } catch (Throwable tt) {
-                ExceptionUtils.handleThrowable(t);
+                ExceptionUtils.handleThrowable(tt);
             }
             // Tell to close the socket
             return false;
@@ -551,67 +387,38 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
         return true;
     }
 
-    protected SSLEngine createSSLEngine() {
-        SSLEngine engine = sslContext.createSSLEngine();
-        if ("false".equals(getClientAuth())) {
-            engine.setNeedClientAuth(false);
-            engine.setWantClientAuth(false);
-        } else if ("true".equals(getClientAuth()) || "yes".equals(getClientAuth())){
-            engine.setNeedClientAuth(true);
-        } else if ("want".equals(getClientAuth())) {
-            engine.setWantClientAuth(true);
+
+    @Override
+    protected void closeSocket(SocketChannel socket) {
+        countDownConnection();
+        try {
+            socket.socket().close();
+        } catch (IOException ioe)  {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("endpoint.err.close"), ioe);
+            }
         }
-        engine.setUseClientMode(false);
-        engine.setEnabledCipherSuites(enabledCiphers);
-        engine.setEnabledProtocols(enabledProtocols);
-
-        configureUseServerCipherSuitesOrder(engine);
-
-        return engine;
-    }
-
-
-    /**
-     * Returns true if a worker thread is available for processing.
-     * @return boolean
-     */
-    protected boolean isWorkerAvailable() {
-        return true;
+        try {
+            socket.close();
+        } catch (IOException ioe) {
+            if (log.isDebugEnabled()) {
+                log.debug(sm.getString("endpoint.err.close"), ioe);
+            }
+        }
     }
 
 
     @Override
-    public void processSocket(SocketWrapperBase<NioChannel> socketWrapper,
-            SocketStatus socketStatus, boolean dispatch) {
-        processSocket((NioSocketWrapper) socketWrapper, socketStatus, dispatch);
+    protected NetworkChannel getServerSocket() {
+        return serverSock;
     }
 
-    protected boolean processSocket(NioSocketWrapper attachment, SocketStatus status, boolean dispatch) {
-        try {
-            if (attachment == null) {
-                return false;
-            }
-            SocketProcessor sc = processorCache.pop();
-            if ( sc == null ) sc = new SocketProcessor(attachment, status);
-            else sc.reset(attachment, status);
-            Executor executor = getExecutor();
-            if (dispatch && executor != null) {
-                executor.execute(sc);
-            } else {
-                sc.run();
-            }
-        } catch (RejectedExecutionException ree) {
-            log.warn(sm.getString("endpoint.executor.fail", attachment.getSocket()), ree);
-            return false;
-        } catch (Throwable t) {
-            ExceptionUtils.handleThrowable(t);
-            // This means we got an OOM or similar creating a thread, or that
-            // the pool and its queue are full
-            log.error(sm.getString("endpoint.process.fail"), t);
-            return false;
-        }
-        return true;
+
+    @Override
+    protected SocketChannel serverSocketAccept() throws Exception {
+        return serverSock.accept();
     }
+
 
     @Override
     protected Log getLog() {
@@ -619,117 +426,32 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
     }
 
 
-    // --------------------------------------------------- Acceptor Inner Class
-    /**
-     * The background thread that listens for incoming TCP/IP connections and
-     * hands them off to an appropriate processor.
-     */
-    protected class Acceptor extends AbstractEndpoint.Acceptor {
-
-        @Override
-        public void run() {
-
-            int errorDelay = 0;
-
-            // Loop until we receive a shutdown command
-            while (running) {
-
-                // Loop if endpoint is paused
-                while (paused && running) {
-                    state = AcceptorState.PAUSED;
-                    try {
-                        Thread.sleep(50);
-                    } catch (InterruptedException e) {
-                        // Ignore
-                    }
-                }
-
-                if (!running) {
-                    break;
-                }
-                state = AcceptorState.RUNNING;
-
-                try {
-                    //if we have reached max connections, wait
-                    countUpOrAwaitConnection();
-
-                    SocketChannel socket = null;
-                    try {
-                        // Accept the next incoming connection from the server
-                        // socket
-                        socket = serverSock.accept();
-                    } catch (IOException ioe) {
-                        //we didn't get a socket
-                        countDownConnection();
-                        // Introduce delay if necessary
-                        errorDelay = handleExceptionWithDelay(errorDelay);
-                        // re-throw
-                        throw ioe;
-                    }
-                    // Successful accept, reset the error delay
-                    errorDelay = 0;
-
-                    // setSocketOptions() will add channel to the poller
-                    // if successful
-                    if (running && !paused) {
-                        if (!setSocketOptions(socket)) {
-                            countDownConnection();
-                            closeSocket(socket);
-                        }
-                    } else {
-                        countDownConnection();
-                        closeSocket(socket);
-                    }
-                } catch (SocketTimeoutException sx) {
-                    // Ignore: Normal condition
-                } catch (IOException x) {
-                    if (running) {
-                        log.error(sm.getString("endpoint.accept.fail"), x);
-                    }
-                } catch (OutOfMemoryError oom) {
-                    try {
-                        oomParachuteData = null;
-                        releaseCaches();
-                        log.error("", oom);
-                    }catch ( Throwable oomt ) {
-                        try {
-                            try {
-                                System.err.println(oomParachuteMsg);
-                                oomt.printStackTrace();
-                            }catch (Throwable letsHopeWeDontGetHere){
-                                ExceptionUtils.handleThrowable(letsHopeWeDontGetHere);
-                            }
-                        }catch (Throwable letsHopeWeDontGetHere){
-                            ExceptionUtils.handleThrowable(letsHopeWeDontGetHere);
-                        }
-                    }
-                } catch (Throwable t) {
-                    ExceptionUtils.handleThrowable(t);
-                    log.error(sm.getString("endpoint.accept.fail"), t);
-                }
-            }
-            state = AcceptorState.ENDED;
-        }
+    @Override
+    protected SocketProcessorBase<NioChannel> createSocketProcessor(
+            SocketWrapperBase<NioChannel> socketWrapper, SocketEvent event) {
+        return new SocketProcessor(socketWrapper, event);
     }
 
 
-    private void closeSocket(SocketChannel socket) {
+    private void close(NioChannel socket, SelectionKey key) {
         try {
-            socket.socket().close();
-        } catch (IOException ioe)  {
-            if (log.isDebugEnabled()) {
-                log.debug("", ioe);
+            if (socket.getPoller().cancelledKey(key) != null) {
+                // SocketWrapper (attachment) was removed from the
+                // key - recycle the key. This can only happen once
+                // per attempted closure so it is used to determine
+                // whether or not to return the key to the cache.
+                // We do NOT want to do this more than once - see BZ
+                // 57340 / 57943.
+                if (running && !paused) {
+                    if (!nioChannels.push(socket)) {
+                        socket.free();
+                    }
+                }
             }
-        }
-        try {
-            socket.close();
-        } catch (IOException ioe) {
-            if (log.isDebugEnabled()) {
-                log.debug("", ioe);
-            }
+        } catch (Exception x) {
+            log.error("",x);
         }
     }
-
 
     // ----------------------------------------------------- Poller Inner Classes
 
@@ -741,16 +463,16 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
 
         private NioChannel socket;
         private int interestOps;
-        private NioSocketWrapper key;
+        private NioSocketWrapper socketWrapper;
 
-        public PollerEvent(NioChannel ch, NioSocketWrapper k, int intOps) {
-            reset(ch, k, intOps);
+        public PollerEvent(NioChannel ch, NioSocketWrapper w, int intOps) {
+            reset(ch, w, intOps);
         }
 
-        public void reset(NioChannel ch, NioSocketWrapper k, int intOps) {
+        public void reset(NioChannel ch, NioSocketWrapper w, int intOps) {
             socket = ch;
             interestOps = intOps;
-            key = k;
+            socketWrapper = w;
         }
 
         public void reset() {
@@ -759,41 +481,46 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
 
         @Override
         public void run() {
-            if ( interestOps == OP_REGISTER ) {
+            if (interestOps == OP_REGISTER) {
                 try {
-                    socket.getIOChannel().register(socket.getPoller().getSelector(), SelectionKey.OP_READ, key);
+                    socket.getIOChannel().register(
+                            socket.getPoller().getSelector(), SelectionKey.OP_READ, socketWrapper);
                 } catch (Exception x) {
-                    log.error("", x);
+                    log.error(sm.getString("endpoint.nio.registerFail"), x);
                 }
             } else {
                 final SelectionKey key = socket.getIOChannel().keyFor(socket.getPoller().getSelector());
                 try {
-                    boolean cancel = false;
-                    if (key != null) {
-                        final NioSocketWrapper att = (NioSocketWrapper) key.attachment();
-                        if ( att!=null ) {
+                    if (key == null) {
+                        // The key was cancelled (e.g. due to socket closure)
+                        // and removed from the selector while it was being
+                        // processed. Count down the connections at this point
+                        // since it won't have been counted down when the socket
+                        // closed.
+                        socket.socketWrapper.getEndpoint().countDownConnection();
+                    } else {
+                        final NioSocketWrapper socketWrapper = (NioSocketWrapper) key.attachment();
+                        if (socketWrapper != null) {
                             //we are registering the key to start with, reset the fairness counter.
                             int ops = key.interestOps() | interestOps;
-                            att.interestOps(ops);
+                            socketWrapper.interestOps(ops);
                             key.interestOps(ops);
                         } else {
-                            cancel = true;
+                            socket.getPoller().cancelledKey(key);
                         }
-                    } else {
-                        cancel = true;
                     }
-                    if ( cancel ) socket.getPoller().cancelledKey(key);
-                }catch (CancelledKeyException ckx) {
+                } catch (CancelledKeyException ckx) {
                     try {
                         socket.getPoller().cancelledKey(key);
-                    }catch (Exception ignore) {}
+                    } catch (Exception ignore) {}
                 }
-            }//end if
-        }//run
+            }
+        }
 
         @Override
         public String toString() {
-            return super.toString()+"[intOps="+this.interestOps+"]";
+            return "Poller event: socket [" + socket + "], socketWrapper [" + socketWrapper +
+                    "], interestOps [" + interestOps + "]";
         }
     }
 
@@ -854,7 +581,7 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
             addEvent(r);
             if (close) {
                 NioEndpoint.NioSocketWrapper ka = (NioEndpoint.NioSocketWrapper)socket.getAttachment();
-                processSocket(ka, SocketStatus.STOP, false);
+                processSocket(ka, SocketEvent.STOP, false);
             }
         }
 
@@ -868,7 +595,7 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
             boolean result = false;
 
             PollerEvent pe = null;
-            while ( (pe = events.poll()) != null ) {
+            for (int i = 0, size = events.size(); i < size && (pe = events.poll()) != null; i++ ) {
                 result = true;
                 try {
                     pe.run();
@@ -892,13 +619,12 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
         public void register(final NioChannel socket) {
             socket.setPoller(this);
             NioSocketWrapper ka = new NioSocketWrapper(socket, NioEndpoint.this);
+            socket.setSocketWrapper(ka);
             ka.setPoller(this);
-            ka.setReadTimeout(getSocketProperties().getSoTimeout());
-            ka.setWriteTimeout(getSocketProperties().getSoTimeout());
+            ka.setReadTimeout(getConnectionTimeout());
+            ka.setWriteTimeout(getConnectionTimeout());
             ka.setKeepAliveLeft(NioEndpoint.this.getMaxKeepAliveRequests());
             ka.setSecure(isSSLEnabled());
-            ka.setReadTimeout(getSoTimeout());
-            ka.setWriteTimeout(getSoTimeout());
             PollerEvent r = eventCache.pop();
             ka.interestOps(SelectionKey.OP_READ);//this is what OP_REGISTER turns into.
             if ( r==null) r = new PollerEvent(socket,ka,OP_REGISTER);
@@ -911,9 +637,28 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
             try {
                 if ( key == null ) return null;//nothing to do
                 ka = (NioSocketWrapper) key.attach(null);
-                if (ka!=null) handler.release(ka);
-                else handler.release((SocketChannel)key.channel());
+                if (ka != null) {
+                    // If attachment is non-null then there may be a current
+                    // connection with an associated processor.
+                    getHandler().release(ka);
+                }
                 if (key.isValid()) key.cancel();
+                // If it is available, close the NioChannel first which should
+                // in turn close the underlying SocketChannel. The NioChannel
+                // needs to be closed first, if available, to ensure that TLS
+                // connections are shut down cleanly.
+                if (ka != null) {
+                    try {
+                        ka.getSocket().close(true);
+                    } catch (Exception e){
+                        if (log.isDebugEnabled()) {
+                            log.debug(sm.getString(
+                                    "endpoint.debug.socketCloseFail"), e);
+                        }
+                    }
+                }
+                // The SocketChannel is also available via the SelectionKey. If
+                // it hasn't been closed in the block above, close it now.
                 if (key.channel().isOpen()) {
                     try {
                         key.channel().close();
@@ -922,16 +667,6 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
                             log.debug(sm.getString(
                                     "endpoint.debug.channelCloseFail"), e);
                         }
-                    }
-                }
-                try {
-                    if (ka!=null) {
-                        ka.getSocket().close(true);
-                    }
-                } catch (Exception e){
-                    if (log.isDebugEnabled()) {
-                        log.debug(sm.getString(
-                                "endpoint.debug.socketCloseFail"), e);
                     }
                 }
                 try {
@@ -951,107 +686,71 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
             }
             return ka;
         }
+
         /**
-         * The background thread that listens for incoming TCP/IP connections and
-         * hands them off to an appropriate processor.
+         * The background thread that adds sockets to the Poller, checks the
+         * poller for triggered events and hands the associated socket off to an
+         * appropriate processor as events occur.
          */
         @Override
         public void run() {
             // Loop until destroy() is called
             while (true) {
+
+                boolean hasEvents = false;
+
                 try {
-                    // Loop if endpoint is paused
-                    while (paused && (!close) ) {
-                        try {
-                            Thread.sleep(100);
-                        } catch (InterruptedException e) {
-                            // Ignore
+                    if (!close) {
+                        hasEvents = events();
+                        if (wakeupCounter.getAndSet(-1) > 0) {
+                            //if we are here, means we have other stuff to do
+                            //do a non blocking select
+                            keyCount = selector.selectNow();
+                        } else {
+                            keyCount = selector.select(selectorTimeout);
                         }
+                        wakeupCounter.set(0);
                     }
-
-                    boolean hasEvents = false;
-
-                    // Time to terminate?
                     if (close) {
                         events();
                         timeout(0, false);
                         try {
                             selector.close();
                         } catch (IOException ioe) {
-                            log.error(sm.getString(
-                                    "endpoint.nio.selectorCloseFail"), ioe);
+                            log.error(sm.getString("endpoint.nio.selectorCloseFail"), ioe);
                         }
                         break;
-                    } else {
-                        hasEvents = events();
                     }
-                    try {
-                        if ( !close ) {
-                            if (wakeupCounter.getAndSet(-1) > 0) {
-                                //if we are here, means we have other stuff to do
-                                //do a non blocking select
-                                keyCount = selector.selectNow();
-                            } else {
-                                keyCount = selector.select(selectorTimeout);
-                            }
-                            wakeupCounter.set(0);
-                        }
-                        if (close) {
-                            events();
-                            timeout(0, false);
-                            try {
-                                selector.close();
-                            } catch (IOException ioe) {
-                                log.error(sm.getString(
-                                        "endpoint.nio.selectorCloseFail"), ioe);
-                            }
-                            break;
-                        }
-                    } catch (Throwable x) {
-                        ExceptionUtils.handleThrowable(x);
-                        log.error("",x);
-                        continue;
-                    }
-                    //either we timed out or we woke up, process events first
-                    if ( keyCount == 0 ) hasEvents = (hasEvents | events());
-
-                    Iterator<SelectionKey> iterator =
-                        keyCount > 0 ? selector.selectedKeys().iterator() : null;
-                    // Walk through the collection of ready keys and dispatch
-                    // any active event.
-                    while (iterator != null && iterator.hasNext()) {
-                        SelectionKey sk = iterator.next();
-                        NioSocketWrapper attachment = (NioSocketWrapper)sk.attachment();
-                        // Attachment may be null if another thread has called
-                        // cancelledKey()
-                        if (attachment == null) {
-                            iterator.remove();
-                        } else {
-                            iterator.remove();
-                            processKey(sk, attachment);
-                        }
-                    }//while
-
-                    //process timeouts
-                    timeout(keyCount,hasEvents);
-                    if ( oomParachute > 0 && oomParachuteData == null ) checkParachute();
-                } catch (OutOfMemoryError oom) {
-                    try {
-                        oomParachuteData = null;
-                        releaseCaches();
-                        log.error("", oom);
-                    }catch ( Throwable oomt ) {
-                        try {
-                            System.err.println(oomParachuteMsg);
-                            oomt.printStackTrace();
-                        }catch (Throwable letsHopeWeDontGetHere){
-                            ExceptionUtils.handleThrowable(letsHopeWeDontGetHere);
-                        }
-                    }
+                } catch (Throwable x) {
+                    ExceptionUtils.handleThrowable(x);
+                    log.error("",x);
+                    continue;
                 }
+                //either we timed out or we woke up, process events first
+                if ( keyCount == 0 ) hasEvents = (hasEvents | events());
+
+                Iterator<SelectionKey> iterator =
+                    keyCount > 0 ? selector.selectedKeys().iterator() : null;
+                // Walk through the collection of ready keys and dispatch
+                // any active event.
+                while (iterator != null && iterator.hasNext()) {
+                    SelectionKey sk = iterator.next();
+                    NioSocketWrapper attachment = (NioSocketWrapper)sk.attachment();
+                    // Attachment may be null if another thread has called
+                    // cancelledKey()
+                    if (attachment == null) {
+                        iterator.remove();
+                    } else {
+                        iterator.remove();
+                        processKey(sk, attachment);
+                    }
+                }//while
+
+                //process timeouts
+                timeout(keyCount,hasEvents);
             }//while
 
-            stopLatch.countDown();
+            getStopLatch().countDown();
         }
 
         protected void processKey(SelectionKey sk, NioSocketWrapper attachment) {
@@ -1063,23 +762,21 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
                         if ( attachment.getSendfileData() != null ) {
                             processSendfile(sk,attachment, false);
                         } else {
-                            if ( isWorkerAvailable() ) {
-                                unreg(sk, attachment, sk.readyOps());
-                                boolean closeSocket = false;
-                                // Read goes before write
-                                if (sk.isReadable()) {
-                                    if (!processSocket(attachment, SocketStatus.OPEN_READ, true)) {
-                                        closeSocket = true;
-                                    }
+                            unreg(sk, attachment, sk.readyOps());
+                            boolean closeSocket = false;
+                            // Read goes before write
+                            if (sk.isReadable()) {
+                                if (!processSocket(attachment, SocketEvent.OPEN_READ, true)) {
+                                    closeSocket = true;
                                 }
-                                if (!closeSocket && sk.isWritable()) {
-                                    if (!processSocket(attachment, SocketStatus.OPEN_WRITE, true)) {
-                                        closeSocket = true;
-                                    }
+                            }
+                            if (!closeSocket && sk.isWritable()) {
+                                if (!processSocket(attachment, SocketEvent.OPEN_WRITE, true)) {
+                                    closeSocket = true;
                                 }
-                                if (closeSocket) {
-                                    cancelledKey(sk);
-                                }
+                            }
+                            if (closeSocket) {
+                                cancelledKey(sk);
                             }
                         }
                     }
@@ -1109,10 +806,6 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
                 if (sd.fchannel == null) {
                     // Setup the file channel
                     File f = new File(sd.fileName);
-                    if (!f.exists()) {
-                        cancelledKey(sk);
-                        return SendfileState.ERROR;
-                    }
                     @SuppressWarnings("resource") // Closed when channel is closed
                     FileInputStream fis = new FileInputStream(f);
                     sd.fchannel = fis.getChannel();
@@ -1120,7 +813,6 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
 
                 // Configure output channel
                 sc = socketWrapper.getSocket();
-                sc.setSendFile(true);
                 // TLS/SSL channel is slightly different
                 WritableByteChannel wc = ((sc instanceof SecureNioChannel)?sc:sc.getIOChannel());
 
@@ -1157,16 +849,30 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
                     // responsible for registering the socket for the
                     // appropriate event(s) if sendfile completes.
                     if (!calledByProcessor) {
-                        if (sd.keepAlive) {
+                        switch (sd.keepAliveState) {
+                        case NONE: {
+                            if (log.isDebugEnabled()) {
+                                log.debug("Send file connection is being closed");
+                            }
+                            close(sc, sk);
+                            break;
+                        }
+                        case PIPELINED: {
+                            if (log.isDebugEnabled()) {
+                                log.debug("Connection is keep alive, processing pipe-lined data");
+                            }
+                            if (!processSocket(socketWrapper, SocketEvent.OPEN_READ, true)) {
+                                close(sc, sk);
+                            }
+                            break;
+                        }
+                        case OPEN: {
                             if (log.isDebugEnabled()) {
                                 log.debug("Connection is keep alive, registering back for OP_READ");
                             }
                             reg(sk,socketWrapper,SelectionKey.OP_READ);
-                        } else {
-                            if (log.isDebugEnabled()) {
-                                log.debug("Send file connection is being closed");
-                            }
-                            cancelledKey(sk);
+                            break;
+                        }
                         }
                     }
                     return SendfileState.DONE;
@@ -1183,14 +889,16 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
                 }
             } catch (IOException x) {
                 if (log.isDebugEnabled()) log.debug("Unable to complete sendfile request:", x);
-                cancelledKey(sk);
+                if (!calledByProcessor && sc != null) {
+                    close(sc, sk);
+                }
                 return SendfileState.ERROR;
             } catch (Throwable t) {
                 log.error("", t);
-                cancelledKey(sk);
+                if (!calledByProcessor && sc != null) {
+                    close(sc, sk);
+                }
                 return SendfileState.ERROR;
-            } finally {
-                if (sc!=null) sc.setSendFile(false);
             }
         }
 
@@ -1218,21 +926,19 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
             }
             //timeout
             int keycount = 0;
-            for (SelectionKey key : selector.keys()) {
-                keycount++;
-                try {
-                    NioSocketWrapper ka = (NioSocketWrapper) key.attachment();
-                    if ( ka == null ) {
-                        cancelledKey(key); //we don't support any keys without attachments
-                    } else if ( ka.getError() != null) {
-                        cancelledKey(key);//TODO this is not yet being used
-                    } else if ((ka.interestOps()&SelectionKey.OP_READ) == SelectionKey.OP_READ ||
-                              (ka.interestOps()&SelectionKey.OP_WRITE) == SelectionKey.OP_WRITE) {
-                        if (close) {
+            try {
+                for (SelectionKey key : selector.keys()) {
+                    keycount++;
+                    try {
+                        NioSocketWrapper ka = (NioSocketWrapper) key.attachment();
+                        if ( ka == null ) {
+                            cancelledKey(key); //we don't support any keys without attachments
+                        } else if (close) {
                             key.interestOps(0);
                             ka.interestOps(0); //avoid duplicate stop calls
                             processKey(key,ka);
-                        } else {
+                        } else if ((ka.interestOps()&SelectionKey.OP_READ) == SelectionKey.OP_READ ||
+                                  (ka.interestOps()&SelectionKey.OP_WRITE) == SelectionKey.OP_WRITE) {
                             boolean isTimedOut = false;
                             // Check for read timeout
                             if ((ka.interestOps() & SelectionKey.OP_READ) == SelectionKey.OP_READ) {
@@ -1249,26 +955,20 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
                             if (isTimedOut) {
                                 key.interestOps(0);
                                 ka.interestOps(0); //avoid duplicate timeout calls
-                                cancelledKey(key);
+                                ka.setError(new SocketTimeoutException());
+                                if (!processSocket(ka, SocketEvent.ERROR, true)) {
+                                    cancelledKey(key);
+                                }
                             }
                         }
-                    } else if (ka.isAsync()) {
-                        if (close) {
-                            key.interestOps(0);
-                            ka.interestOps(0); //avoid duplicate stop calls
-                            processKey(key,ka);
-                        } else if (ka.getAsyncTimeout() > 0) {
-                            if ((now - ka.getLastAsyncStart()) > ka.getAsyncTimeout()) {
-                                // Prevent subsequent timeouts if the timeout event takes a while to process
-                                ka.setAsyncTimeout(0);
-                                processSocket(ka, SocketStatus.TIMEOUT, true);
-                            }
-                        }
-                    }//end if
-                }catch ( CancelledKeyException ckx ) {
-                    cancelledKey(key);
-                }
-            }//for
+                    }catch ( CancelledKeyException ckx ) {
+                        cancelledKey(key);
+                    }
+                }//for
+            } catch (ConcurrentModificationException cme) {
+                // See https://bz.apache.org/bugzilla/show_bug.cgi?id=57943
+                log.warn(sm.getString("endpoint.nio.timeoutCme"), cme);
+            }
             long prevExp = nextExpiration; //for logging purposes only
             nextExpiration = System.currentTimeMillis() +
                     socketProperties.getTimeoutInterval();
@@ -1292,6 +992,8 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
         private CountDownLatch readLatch = null;
         private CountDownLatch writeLatch = null;
         private volatile SendfileData sendfileData = null;
+        private volatile long lastRead = System.currentTimeMillis();
+        private volatile long lastWrite = lastRead;
 
         public NioSocketWrapper(NioChannel channel, NioEndpoint endpoint) {
             super(channel, endpoint);
@@ -1334,6 +1036,11 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
         public void setSendfileData(SendfileData sf) { this.sendfileData = sf;}
         public SendfileData getSendfileData() { return this.sendfileData;}
 
+        public void updateLastWrite() { lastWrite = System.currentTimeMillis(); }
+        public long getLastWrite() { return lastWrite; }
+        public void updateLastRead() { lastRead = System.currentTimeMillis(); }
+        public long getLastRead() { return lastRead; }
+
 
         @Override
         public boolean isReadyForRead() throws IOException {
@@ -1351,23 +1058,10 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
 
 
         @Override
-        public int read(boolean block, byte[] b, int off, int len)
-                throws IOException {
-
-            socketBufferHandler.configureReadBufferForRead();
-            ByteBuffer readBuffer = socketBufferHandler.getReadBuffer();
-            int remaining = readBuffer.remaining();
-
-            // Is there enough data in the read buffer to satisfy this request?
-            if (remaining >= len) {
-                readBuffer.get(b, off, len);
-                return len;
-            }
-
-            // Copy what data there is in the read buffer to the byte array
-            if (remaining > 0) {
-                readBuffer.get(b, off, remaining);
-                return remaining;
+        public int read(boolean block, byte[] b, int off, int len) throws IOException {
+            int nRead = populateReadBuffer(b, off, len);
+            if (nRead > 0) {
+                return nRead;
                 /*
                  * Since more bytes may have arrived since the buffer was last
                  * filled, it is an option at this point to perform a
@@ -1378,69 +1072,107 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
             }
 
             // Fill the read buffer as best we can.
-            int nRead = fillReadBuffer(block);
+            nRead = fillReadBuffer(block);
+            updateLastRead();
 
-            // Full as much of the remaining byte array as possible with the
+            // Fill as much of the remaining byte array as possible with the
             // data that was just read
             if (nRead > 0) {
                 socketBufferHandler.configureReadBufferForRead();
-                if (nRead > len) {
-                    readBuffer.get(b, off, len);
-                    return len;
-                } else {
-                    readBuffer.get(b, off, nRead);
-                    return nRead;
-                }
-            } else {
-                return nRead;
-            }
-        }
-
-
-        @Override
-        public void close() throws IOException {
-            NioChannel socket = getSocket();
-            if (socket != null) {
-                socket.close();
-            }
-        }
-
-
-        private int fillReadBuffer(boolean block) throws IOException {
-            int nRead;
-            NioChannel channel = getSocket();
-            socketBufferHandler.configureReadBufferForWrite();
-            if (block) {
-                Selector selector = null;
-                try {
-                    selector = pool.get();
-                } catch ( IOException x ) {
-                    // Ignore
-                }
-                try {
-                    NioEndpoint.NioSocketWrapper att =
-                            (NioEndpoint.NioSocketWrapper) channel.getAttachment();
-                    if (att == null) {
-                        throw new IOException("Key must be cancelled.");
-                    }
-                    nRead = pool.read(socketBufferHandler.getReadBuffer(),
-                            channel, selector, att.getReadTimeout());
-                } finally {
-                    if (selector != null) {
-                        pool.put(selector);
-                    }
-                }
-            } else {
-                nRead = channel.read(socketBufferHandler.getReadBuffer());
+                nRead = Math.min(nRead, len);
+                socketBufferHandler.getReadBuffer().get(b, off, nRead);
             }
             return nRead;
         }
 
 
         @Override
-        protected synchronized void doWriteInternal(boolean block) throws IOException {
-            socketBufferHandler.configureWriteBufferForRead();
+        public int read(boolean block, ByteBuffer to) throws IOException {
+            int nRead = populateReadBuffer(to);
+            if (nRead > 0) {
+                return nRead;
+                /*
+                 * Since more bytes may have arrived since the buffer was last
+                 * filled, it is an option at this point to perform a
+                 * non-blocking read. However correctly handling the case if
+                 * that read returns end of stream adds complexity. Therefore,
+                 * at the moment, the preference is for simplicity.
+                 */
+            }
 
+            // The socket read buffer capacity is socket.appReadBufSize
+            int limit = socketBufferHandler.getReadBuffer().capacity();
+            if (to.remaining() >= limit) {
+                to.limit(to.position() + limit);
+                nRead = fillReadBuffer(block, to);
+                updateLastRead();
+            } else {
+                // Fill the read buffer as best we can.
+                nRead = fillReadBuffer(block);
+                updateLastRead();
+
+                // Fill as much of the remaining byte array as possible with the
+                // data that was just read
+                if (nRead > 0) {
+                    nRead = populateReadBuffer(to);
+                }
+            }
+            return nRead;
+        }
+
+
+        @Override
+        public void close() throws IOException {
+            getSocket().close();
+        }
+
+
+        @Override
+        public boolean isClosed() {
+            return !getSocket().isOpen();
+        }
+
+
+        private int fillReadBuffer(boolean block) throws IOException {
+            socketBufferHandler.configureReadBufferForWrite();
+            return fillReadBuffer(block, socketBufferHandler.getReadBuffer());
+        }
+
+
+        private int fillReadBuffer(boolean block, ByteBuffer to) throws IOException {
+            int nRead;
+            NioChannel channel = getSocket();
+            if (block) {
+                Selector selector = null;
+                try {
+                    selector = pool.get();
+                } catch (IOException x) {
+                    // Ignore
+                }
+                try {
+                    NioEndpoint.NioSocketWrapper att = (NioEndpoint.NioSocketWrapper) channel
+                            .getAttachment();
+                    if (att == null) {
+                        throw new IOException("Key must be cancelled.");
+                    }
+                    nRead = pool.read(to, channel, selector, att.getReadTimeout());
+                } finally {
+                    if (selector != null) {
+                        pool.put(selector);
+                    }
+                }
+            } else {
+                nRead = channel.read(to);
+                if (nRead == -1) {
+                    throw new EOFException();
+                }
+            }
+            return nRead;
+        }
+
+
+        @Override
+        protected void doWrite(boolean block, ByteBuffer from) throws IOException {
             long writeTimeout = getWriteTimeout();
             Selector selector = null;
             try {
@@ -1449,14 +1181,16 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
                 // Ignore
             }
             try {
-                pool.write(socketBufferHandler.getWriteBuffer(), getSocket(),
-                        selector, writeTimeout, block);
+                pool.write(from, getSocket(), selector, writeTimeout, block);
                 if (block) {
                     // Make sure we are flushed
                     do {
-                        if (getSocket().flush(true, selector, writeTimeout)) break;
+                        if (getSocket().flush(true, selector, writeTimeout)) {
+                            break;
+                        }
                     } while (true);
                 }
+                updateLastWrite();
             } finally {
                 if (selector != null) {
                     pool.put(selector);
@@ -1466,12 +1200,6 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
             // write further up the stack. This is to ensure the socket is only
             // registered for write once as both container and user code can trigger
             // write registration.
-        }
-
-
-        @Override
-        public boolean isReadPending() {
-            return false;
         }
 
 
@@ -1571,168 +1299,105 @@ public class NioEndpoint extends AbstractEndpoint<NioChannel> {
 
 
         @Override
-        public void doClientAuth(SSLSupport sslSupport) {
+        public void doClientAuth(SSLSupport sslSupport) throws IOException {
             SecureNioChannel sslChannel = (SecureNioChannel) getSocket();
             SSLEngine engine = sslChannel.getSslEngine();
             if (!engine.getNeedClientAuth()) {
                 // Need to re-negotiate SSL connection
                 engine.setNeedClientAuth(true);
-                try {
-                    sslChannel.rehandshake(getEndpoint().getSoTimeout());
-                    ((JSSESupport) sslSupport).setSession(engine.getSession());
-                } catch (IOException ioe) {
-                    log.warn(sm.getString("http11processor.socket.sslreneg",ioe));
-                }
+                sslChannel.rehandshake(getEndpoint().getConnectionTimeout());
+                ((JSSESupport) sslSupport).setSession(engine.getSession());
             }
         }
-    }
 
 
-    // ------------------------------------------------ Handler Inner Interface
-
-    /**
-     * Bare bones interface used for socket processing. Per thread data is to be
-     * stored in the ThreadWithAttributes extra folders, or alternately in
-     * thread local fields.
-     */
-    public interface Handler extends AbstractEndpoint.Handler<NioChannel> {
-        public void release(SocketWrapperBase<NioChannel> socket);
-        public void release(SocketChannel socket);
+        @Override
+        public void setAppReadBufHandler(ApplicationBufferHandler handler) {
+            getSocket().setAppReadBufHandler(handler);
+        }
     }
 
 
     // ---------------------------------------------- SocketProcessor Inner Class
+
     /**
      * This class is the equivalent of the Worker, but will simply use in an
      * external Executor thread pool.
      */
-    protected class SocketProcessor implements Runnable {
+    protected class SocketProcessor extends SocketProcessorBase<NioChannel> {
 
-        private NioSocketWrapper ka = null;
-        private SocketStatus status = null;
-
-        public SocketProcessor(NioSocketWrapper ka, SocketStatus status) {
-            reset(ka, status);
-        }
-
-        public void reset(NioSocketWrapper ka, SocketStatus status) {
-            this.ka = ka;
-            this.status = status;
+        public SocketProcessor(SocketWrapperBase<NioChannel> socketWrapper, SocketEvent event) {
+            super(socketWrapper, event);
         }
 
         @Override
-        public void run() {
-            NioChannel socket = ka.getSocket();
-            if (socket == null) {
-                return;
-            }
-            SelectionKey key = socket.getIOChannel().keyFor(
-                    socket.getPoller().getSelector());
+        protected void doRun() {
+            NioChannel socket = socketWrapper.getSocket();
+            SelectionKey key = socket.getIOChannel().keyFor(socket.getPoller().getSelector());
 
-            synchronized (socket) {
+            try {
+                int handshake = -1;
+
                 try {
-                    int handshake = -1;
-
-                    try {
-                        if (key != null) {
-                            // For STOP there is no point trying to handshake as the
-                            // Poller has been stopped.
-                            if (socket.isHandshakeComplete() ||
-                                    status == SocketStatus.STOP) {
-                                handshake = 0;
-                            } else {
-                                handshake = socket.handshake(
-                                        key.isReadable(), key.isWritable());
-                                // The handshake process reads/writes from/to the
-                                // socket. status may therefore be OPEN_WRITE once
-                                // the handshake completes. However, the handshake
-                                // happens when the socket is opened so the status
-                                // must always be OPEN_READ after it completes. It
-                                // is OK to always set this as it is only used if
-                                // the handshake completes.
-                                status = SocketStatus.OPEN_READ;
-                            }
-                        }
-                    } catch (IOException x) {
-                        handshake = -1;
-                        if (log.isDebugEnabled()) log.debug("Error during SSL handshake",x);
-                    } catch (CancelledKeyException ckx) {
-                        handshake = -1;
-                    }
-                    if (handshake == 0) {
-                        SocketState state = SocketState.OPEN;
-                        // Process the request from this socket
-                        if (status == null) {
-                            state = handler.process(ka, SocketStatus.OPEN_READ);
+                    if (key != null) {
+                        if (socket.isHandshakeComplete()) {
+                            // No TLS handshaking required. Let the handler
+                            // process this socket / event combination.
+                            handshake = 0;
+                        } else if (event == SocketEvent.STOP || event == SocketEvent.DISCONNECT ||
+                                event == SocketEvent.ERROR) {
+                            // Unable to complete the TLS handshake. Treat it as
+                            // if the handshake failed.
+                            handshake = -1;
                         } else {
-                            state = handler.process(ka, status);
+                            handshake = socket.handshake(key.isReadable(), key.isWritable());
+                            // The handshake process reads/writes from/to the
+                            // socket. status may therefore be OPEN_WRITE once
+                            // the handshake completes. However, the handshake
+                            // happens when the socket is opened so the status
+                            // must always be OPEN_READ after it completes. It
+                            // is OK to always set this as it is only used if
+                            // the handshake completes.
+                            event = SocketEvent.OPEN_READ;
                         }
-                        if (state == SocketState.CLOSED) {
-                            // Close socket and pool
-                            try {
-                                if (socket.getPoller().cancelledKey(key) != null) {
-                                    // SocketWrapper (attachment) was removed from the
-                                    // key - recycle both. This can only happen once
-                                    // per attempted closure so it is used to determine
-                                    // whether or not to return socket and ka to
-                                    // their respective caches. We do NOT want to do
-                                    // this more than once - see BZ 57340.
-                                    if (running && !paused) {
-                                        nioChannels.push(socket);
-                                    }
-                                    socket = null;
-                                }
-                                ka = null;
-                            } catch (Exception x) {
-                                log.error("",x);
-                            }
-                        }
-                    } else if (handshake == -1 ) {
-                        if (key != null) {
-                            socket.getPoller().cancelledKey(key);
-                        }
-                        if (running && !paused) {
-                            nioChannels.push(socket);
-                        }
-                        socket = null;
-                        ka = null;
+                    }
+                } catch (IOException x) {
+                    handshake = -1;
+                    if (log.isDebugEnabled()) log.debug("Error during SSL handshake",x);
+                } catch (CancelledKeyException ckx) {
+                    handshake = -1;
+                }
+                if (handshake == 0) {
+                    SocketState state = SocketState.OPEN;
+                    // Process the request from this socket
+                    if (event == null) {
+                        state = getHandler().process(socketWrapper, SocketEvent.OPEN_READ);
                     } else {
-                        ka.getPoller().add(socket,handshake);
+                        state = getHandler().process(socketWrapper, event);
                     }
-                } catch (CancelledKeyException cx) {
-                    if (socket != null) {
-                        socket.getPoller().cancelledKey(key);
+                    if (state == SocketState.CLOSED) {
+                        close(socket, key);
                     }
-                } catch (OutOfMemoryError oom) {
-                    try {
-                        oomParachuteData = null;
-                        log.error("", oom);
-                        if (socket != null) {
-                            socket.getPoller().cancelledKey(key);
-                        }
-                        releaseCaches();
-                    } catch (Throwable oomt) {
-                        try {
-                            System.err.println(oomParachuteMsg);
-                            oomt.printStackTrace();
-                        } catch (Throwable letsHopeWeDontGetHere){
-                            ExceptionUtils.handleThrowable(letsHopeWeDontGetHere);
-                        }
-                    }
-                } catch (VirtualMachineError vme) {
-                    ExceptionUtils.handleThrowable(vme);
-                } catch (Throwable t) {
-                    log.error("", t);
-                    if (socket != null) {
-                        socket.getPoller().cancelledKey(key);
-                    }
-                } finally {
-                    socket = null;
-                    status = null;
-                    //return to cache
-                    if (running && !paused) {
-                        processorCache.push(this);
-                    }
+                } else if (handshake == -1 ) {
+                    close(socket, key);
+                } else if (handshake == SelectionKey.OP_READ){
+                    socketWrapper.registerReadInterest();
+                } else if (handshake == SelectionKey.OP_WRITE){
+                    socketWrapper.registerWriteInterest();
+                }
+            } catch (CancelledKeyException cx) {
+                socket.getPoller().cancelledKey(key);
+            } catch (VirtualMachineError vme) {
+                ExceptionUtils.handleThrowable(vme);
+            } catch (Throwable t) {
+                log.error("", t);
+                socket.getPoller().cancelledKey(key);
+            } finally {
+                socketWrapper = null;
+                event = null;
+                //return to cache
+                if (running && !paused) {
+                    processorCache.push(this);
                 }
             }
         }

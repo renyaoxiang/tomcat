@@ -20,11 +20,11 @@ import java.io.ByteArrayInputStream;
 import java.io.CharArrayWriter;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.ListIterator;
 
 import javax.servlet.jsp.tagext.PageData;
 
 import org.apache.jasper.JasperException;
+import org.apache.tomcat.util.security.Escape;
 import org.xml.sax.Attributes;
 import org.xml.sax.helpers.AttributesImpl;
 
@@ -58,9 +58,10 @@ class PageDataImpl extends PageData implements TagConstants {
     private final StringBuilder buf;
 
     /**
-     * Constructor.
-     *
      * @param page the page nodes from which to generate the XML view
+     * @param compiler The compiler for this page
+     *
+     * @throws JasperException If an error occurs
      */
     public PageDataImpl(Node.Nodes page, Compiler compiler)
                 throws JasperException {
@@ -330,7 +331,7 @@ class PageDataImpl extends PageData implements TagConstants {
                 buf.append(jspId++).append("\">");
             }
             buf.append("${");
-            buf.append(JspUtil.escapeXml(n.getText()));
+            buf.append(Escape.xml(n.getText()));
             buf.append("}");
             if (!n.getRoot().isXmlSyntax()) {
                 buf.append(JSP_TEXT_ACTION_END);
@@ -551,15 +552,14 @@ class PageDataImpl extends PageData implements TagConstants {
             if (n.getImports().size() > 0) {
                 // Concatenate names of imported classes/packages
                 boolean first = true;
-                ListIterator<String> iter = n.getImports().listIterator();
-                while (iter.hasNext()) {
+                for (String i : n.getImports()) {
                     if (first) {
                         first = false;
                         buf.append("  import=\"");
                     } else {
                         buf.append(",");
                     }
-                    buf.append(JspUtil.getExprInXml(iter.next()));
+                    buf.append(JspUtil.getExprInXml(i));
                 }
                 buf.append("\"\n");
             }

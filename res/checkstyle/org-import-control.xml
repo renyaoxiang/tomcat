@@ -1,4 +1,4 @@
-<?xml version="1.0"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <!--
  Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -87,8 +87,8 @@
     <allow pkg="javax.servlet"/>
     <allow pkg="org.apache.coyote"/>
     <allow pkg="org.apache.juli"/>
+    <allow pkg="org.apache.tomcat"/>
     <allow pkg="org.apache.tomcat.jni"/>
-    <allow pkg="org.apache.tomcat.spdy"/>
     <allow pkg="org.apache.tomcat.util"/>
   </subpackage>
   <subpackage name="el">
@@ -145,10 +145,6 @@
         <allow pkg="org.apache.tomcat.jni"/>
       </subpackage>
     </subpackage>
-    <subpackage name="spdy">
-      <allow pkg="org.apache.tomcat.jni"/>
-      <allow pkg="org.apache.tomcat.spdy"/>
-    </subpackage>
     <subpackage name="util">
       <allow pkg="org.apache.juli"/>
       <allow pkg="org.apache.tomcat.jni"/>
@@ -165,6 +161,7 @@
     <subpackage name="websocket">
       <allow pkg="javax.websocket"/>
       <allow pkg="org.apache.juli"/>
+      <allow pkg="org.apache.tomcat"/>
       <allow pkg="org.apache.tomcat.util"/>
       <!-- Ideally want to remove this -->
       <allow pkg="org.apache.tomcat.websocket.pojo"/>

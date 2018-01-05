@@ -38,7 +38,6 @@ import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
 import org.apache.tomcat.util.ExceptionUtils;
 import org.apache.tomcat.util.buf.ByteChunk;
-import org.apache.tomcat.util.buf.CharChunk;
 import org.apache.tomcat.util.buf.MessageBytes;
 import org.apache.tomcat.util.descriptor.web.LoginConfig;
 import org.apache.tomcat.util.http.MimeHeaders;
@@ -116,7 +115,7 @@ public class FormAuthenticator
     }
 
 
-    // --------------------------------------------------------- Public Methods
+    // ------------------------------------------------------ Protected Methods
 
 
     /**
@@ -131,7 +130,7 @@ public class FormAuthenticator
      * @exception IOException if an input/output error occurs
      */
     @Override
-    public boolean authenticate(Request request, HttpServletResponse response)
+    protected boolean doAuthenticate(Request request, HttpServletResponse response)
             throws IOException {
 
         if (checkForCachedAuthentication(request, response, true)) {
@@ -208,9 +207,6 @@ public class FormAuthenticator
         }
 
         // Acquire references to objects we will need to evaluate
-        MessageBytes uriMB = MessageBytes.newInstance();
-        CharChunk uriCC = uriMB.getCharChunk();
-        uriCC.setLimit(-1);
         String contextPath = request.getContextPath();
         String requestURI = request.getDecodedRequestURI();
 
@@ -223,6 +219,20 @@ public class FormAuthenticator
 
         // No -- Save this request and redirect to the form login page
         if (!loginAction) {
+            // If this request was to the root of the context without a trailing
+            // '/', need to redirect to add it else the submit of the login form
+            // may not go to the correct web application
+            if (request.getServletPath().length() == 0 && request.getPathInfo() == null) {
+                StringBuilder location = new StringBuilder(requestURI);
+                location.append('/');
+                if (request.getQueryString() != null) {
+                    location.append('?');
+                    location.append(request.getQueryString());
+                }
+                response.sendRedirect(response.encodeRedirectURL(location.toString()));
+                return false;
+            }
+
             session = request.getSessionInternal(true);
             if (log.isDebugEnabled()) {
                 log.debug("Save request in session '" + session.getIdInternal() + "'");
@@ -334,12 +344,40 @@ public class FormAuthenticator
 
 
     @Override
-    protected String getAuthMethod() {
-        return HttpServletRequest.FORM_AUTH;
+    protected boolean isContinuationRequired(Request request) {
+        // Special handling for form-based logins to deal with the case
+        // where the login form (and therefore the "j_security_check" URI
+        // to which it submits) might be outside the secured area
+        String contextPath = this.context.getPath();
+        String decodedRequestURI = request.getDecodedRequestURI();
+        if (decodedRequestURI.startsWith(contextPath) &&
+                decodedRequestURI.endsWith(Constants.FORM_ACTION)) {
+            return true;
+        }
+
+        // Special handling for form-based logins to deal with the case where
+        // a resource is protected for some HTTP methods but not protected for
+        // GET which is used after authentication when redirecting to the
+        // protected resource.
+        // TODO: This is similar to the FormAuthenticator.matchRequest() logic
+        // Is there a way to remove the duplication?
+        Session session = request.getSessionInternal(false);
+        if (session != null) {
+            SavedRequest savedRequest = (SavedRequest) session.getNote(Constants.FORM_REQUEST_NOTE);
+            if (savedRequest != null &&
+                    decodedRequestURI.equals(savedRequest.getDecodedRequestURI())) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
 
-    // ------------------------------------------------------ Protected Methods
+    @Override
+    protected String getAuthMethod() {
+        return HttpServletRequest.FORM_AUTH;
+    }
 
 
     /**
@@ -389,9 +427,9 @@ public class FormAuthenticator
         RequestDispatcher disp =
             context.getServletContext().getRequestDispatcher(loginPage);
         try {
-            if (context.fireRequestInitEvent(request)) {
+            if (context.fireRequestInitEvent(request.getRequest())) {
                 disp.forward(request.getRequest(), response);
-                context.fireRequestDestroyEvent(request);
+                context.fireRequestDestroyEvent(request.getRequest());
             }
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
@@ -433,12 +471,11 @@ public class FormAuthenticator
         }
 
         RequestDispatcher disp =
-            context.getServletContext().getRequestDispatcher
-            (config.getErrorPage());
+                context.getServletContext().getRequestDispatcher(config.getErrorPage());
         try {
-            if (context.fireRequestInitEvent(request)) {
+            if (context.fireRequestInitEvent(request.getRequest())) {
                 disp.forward(request.getRequest(), response);
-                context.fireRequestDestroyEvent(request);
+                context.fireRequestDestroyEvent(request.getRequest());
             }
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
@@ -456,6 +493,7 @@ public class FormAuthenticator
      * we signaled after successful authentication?
      *
      * @param request The request to be verified
+     * @return <code>true</code> if the requests matched the saved one
      */
     protected boolean matchRequest(Request request) {
         // Has a session been created?
@@ -493,6 +531,8 @@ public class FormAuthenticator
      *
      * @param request The request to be restored
      * @param session The session containing the saved information
+     * @return <code>true</code> if the request was successfully restored
+     * @throws IOException if an IO error occurred during the process
      */
     protected boolean restoreRequest(Request request, Session session)
             throws IOException {
@@ -526,7 +566,7 @@ public class FormAuthenticator
         String method = saved.getMethod();
         MimeHeaders rmh = request.getCoyoteRequest().getMimeHeaders();
         rmh.recycle();
-        boolean cachable = "GET".equalsIgnoreCase(method) ||
+        boolean cacheable = "GET".equalsIgnoreCase(method) ||
                            "HEAD".equalsIgnoreCase(method);
         Iterator<String> names = saved.getHeaderNames();
         while (names.hasNext()) {
@@ -535,7 +575,7 @@ public class FormAuthenticator
             // Assuming that it can quietly recover from an unexpected 412.
             // BZ 43687
             if(!("If-Modified-Since".equalsIgnoreCase(name) ||
-                 (cachable && "If-None-Match".equalsIgnoreCase(name)))) {
+                 (cacheable && "If-None-Match".equalsIgnoreCase(name)))) {
                 Iterator<String> values = saved.getHeaderValues(name);
                 while (values.hasNext()) {
                     rmh.addValue(name).setString(values.next());
@@ -550,8 +590,6 @@ public class FormAuthenticator
         }
 
         request.getCoyoteRequest().getParameters().recycle();
-        request.getCoyoteRequest().getParameters().setQueryStringEncoding(
-                request.getConnector().getURIEncoding());
 
         ByteChunk body = saved.getBody();
 
@@ -583,7 +621,7 @@ public class FormAuthenticator
      *
      * @param request The request to be saved
      * @param session The session to contain the saved information
-     * @throws IOException
+     * @throws IOException if an IO error occurred during the process
      */
     protected void saveRequest(Request request, Session session)
         throws IOException {
@@ -646,21 +684,20 @@ public class FormAuthenticator
      * from the saved request so that we can redirect to it.
      *
      * @param session Our current session
+     * @return the original request URL
      */
     protected String savedRequestURL(Session session) {
-
         SavedRequest saved =
             (SavedRequest) session.getNote(Constants.FORM_REQUEST_NOTE);
         if (saved == null) {
-            return (null);
+            return null;
         }
         StringBuilder sb = new StringBuilder(saved.getRequestURI());
         if (saved.getQueryString() != null) {
             sb.append('?');
             sb.append(saved.getQueryString());
         }
-        return (sb.toString());
-
+        return sb.toString();
     }
 
 

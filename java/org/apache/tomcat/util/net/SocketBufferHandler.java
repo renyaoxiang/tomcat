@@ -18,17 +18,21 @@ package org.apache.tomcat.util.net;
 
 import java.nio.ByteBuffer;
 
+import org.apache.tomcat.util.buf.ByteBufferUtils;
+
 public class SocketBufferHandler {
 
     private volatile boolean readBufferConfiguredForWrite = true;
-    private final ByteBuffer readBuffer;
+    private volatile ByteBuffer readBuffer;
 
     private volatile boolean writeBufferConfiguredForWrite = true;
-    private final ByteBuffer writeBuffer;
+    private volatile ByteBuffer writeBuffer;
 
+    private final boolean direct;
 
     public SocketBufferHandler(int readBufferSize, int writeBufferSize,
             boolean direct) {
+        this.direct = direct;
         if (direct) {
             readBuffer = ByteBuffer.allocateDirect(readBufferSize);
             writeBuffer = ByteBuffer.allocateDirect(writeBufferSize);
@@ -40,16 +44,16 @@ public class SocketBufferHandler {
 
 
     public void configureReadBufferForWrite() {
-        setReadBufferConFiguredForWrite(true);
+        setReadBufferConfiguredForWrite(true);
     }
 
 
     public void configureReadBufferForRead() {
-        setReadBufferConFiguredForWrite(false);
+        setReadBufferConfiguredForWrite(false);
     }
 
 
-    private void setReadBufferConFiguredForWrite(boolean readBufferConFiguredForWrite) {
+    private void setReadBufferConfiguredForWrite(boolean readBufferConFiguredForWrite) {
         // NO-OP if buffer is already in correct state
         if (this.readBufferConfiguredForWrite != readBufferConFiguredForWrite) {
             if (readBufferConFiguredForWrite) {
@@ -59,8 +63,6 @@ public class SocketBufferHandler {
                     readBuffer.clear();
                 } else {
                     readBuffer.compact();
-                    readBuffer.position(remaining);
-                    readBuffer.limit(readBuffer.capacity());
                 }
             } else {
                 // Switching to read
@@ -146,4 +148,20 @@ public class SocketBufferHandler {
         writeBuffer.clear();
         writeBufferConfiguredForWrite = true;
     }
+
+
+    public void expand(int newSize) {
+        configureReadBufferForWrite();
+        readBuffer = ByteBufferUtils.expand(readBuffer, newSize);
+        configureWriteBufferForWrite();
+        writeBuffer = ByteBufferUtils.expand(writeBuffer, newSize);
+    }
+
+    public void free() {
+        if (direct) {
+            ByteBufferUtils.cleanDirectBuffer(readBuffer);
+            ByteBufferUtils.cleanDirectBuffer(writeBuffer);
+        }
+    }
+
 }

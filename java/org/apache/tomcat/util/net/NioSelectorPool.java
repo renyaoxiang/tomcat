@@ -44,7 +44,7 @@ public class NioSelectorPool {
     private static final Log log = LogFactory.getLog(NioSelectorPool.class);
 
     protected static final boolean SHARED =
-        Boolean.valueOf(System.getProperty("org.apache.tomcat.util.net.NioSelectorShared", "true")).booleanValue();
+        Boolean.parseBoolean(System.getProperty("org.apache.tomcat.util.net.NioSelectorShared", "true"));
 
     protected NioBlockingSelector blockingSelector;
 
@@ -71,7 +71,6 @@ public class NioSelectorPool {
         return  SHARED_SELECTOR;
     }
 
-    @SuppressWarnings("resource") // s is closed in put()
     public Selector get() throws IOException{
         if ( SHARED ) {
             return getSharedSelector();

@@ -36,8 +36,7 @@ import org.apache.tomcat.util.res.StringManager;
  */
 public class B2CConverter {
 
-    private static final StringManager sm =
-        StringManager.getManager(Constants.Package);
+    private static final StringManager sm = StringManager.getManager(B2CConverter.class);
 
     private static final Map<String, Charset> encodingToCharsetCache =
             new HashMap<>();
@@ -56,20 +55,21 @@ public class B2CConverter {
         }
     }
 
-    public static Charset getCharset(String enc)
-            throws UnsupportedEncodingException {
+
+    /**
+     * Obtain the Charset for the given encoding
+     *
+     * @param enc The name of the encoding for the required charset
+     *
+     * @return The Charset corresponding to the requested encoding
+     *
+     * @throws UnsupportedEncodingException If the requested Charset is not
+     *                                      available
+     */
+    public static Charset getCharset(String enc) throws UnsupportedEncodingException {
 
         // Encoding names should all be ASCII
         String lowerCaseEnc = enc.toLowerCase(Locale.ENGLISH);
-
-        return getCharsetLower(lowerCaseEnc);
-    }
-
-    /**
-     * Only to be used when it is known that the encoding name is in lower case.
-     */
-    public static Charset getCharsetLower(String lowerCaseEnc)
-            throws UnsupportedEncodingException {
 
         Charset charset = encodingToCharsetCache.get(lowerCaseEnc);
 
@@ -81,6 +81,7 @@ public class B2CConverter {
         return charset;
     }
 
+
     private final CharsetDecoder decoder;
     private ByteBuffer bb = null;
     private CharBuffer cb = null;
@@ -90,12 +91,11 @@ public class B2CConverter {
      */
     private final ByteBuffer leftovers;
 
-    public B2CConverter(String encoding) throws IOException {
-        this(encoding, false);
+    public B2CConverter(Charset charset) {
+        this(charset, false);
     }
 
-    public B2CConverter(String encoding, boolean replaceOnError)
-            throws IOException {
+    public B2CConverter(Charset charset, boolean replaceOnError) {
         byte[] left = new byte[LEFTOVER_SIZE];
         leftovers = ByteBuffer.wrap(left);
         CodingErrorAction action;
@@ -104,7 +104,6 @@ public class B2CConverter {
         } else {
             action = CodingErrorAction.REPORT;
         }
-        Charset charset = getCharset(encoding);
         // Special case. Use the Apache Harmony based UTF-8 decoder because it
         // - a) rejects invalid sequences that the JVM decoder does not
         // - b) fails faster for some invalid sequences
@@ -131,6 +130,8 @@ public class B2CConverter {
      * @param bc byte input
      * @param cc char output
      * @param endOfInput    Is this all of the available data
+     *
+     * @throws IOException If the conversion can not be completed
      */
     public void convert(ByteChunk bc, CharChunk cc, boolean endOfInput)
             throws IOException {
@@ -190,5 +191,86 @@ public class B2CConverter {
                 bc.substract(leftovers.array(), 0, bc.getLength());
             }
         }
+    }
+
+    /**
+     * Convert the given bytes to characters.
+     *
+     * @param bc byte input
+     * @param cc char output
+     * @param ic byte input channel
+     * @param endOfInput    Is this all of the available data
+     *
+     * @throws IOException If the conversion can not be completed
+     */
+    public void convert(ByteBuffer bc, CharBuffer cc, ByteChunk.ByteInputChannel ic, boolean endOfInput)
+            throws IOException {
+        if ((bb == null) || (bb.array() != bc.array())) {
+            // Create a new byte buffer if anything changed
+            bb = ByteBuffer.wrap(bc.array(), bc.arrayOffset() + bc.position(), bc.remaining());
+        } else {
+            // Initialize the byte buffer
+            bb.limit(bc.limit());
+            bb.position(bc.position());
+        }
+        if ((cb == null) || (cb.array() != cc.array())) {
+            // Create a new char buffer if anything changed
+            cb = CharBuffer.wrap(cc.array(), cc.limit(), cc.capacity() - cc.limit());
+        } else {
+            // Initialize the char buffer
+            cb.limit(cc.capacity());
+            cb.position(cc.limit());
+        }
+        CoderResult result = null;
+        // Parse leftover if any are present
+        if (leftovers.position() > 0) {
+            int pos = cb.position();
+            // Loop until one char is decoded or there is a decoder error
+            do {
+                byte chr;
+                if (bc.remaining() == 0) {
+                    int n = ic.realReadBytes();
+                    chr = n < 0 ? -1 : bc.get();
+                } else {
+                    chr = bc.get();
+                }
+                leftovers.put(chr);
+                leftovers.flip();
+                result = decoder.decode(leftovers, cb, endOfInput);
+                leftovers.position(leftovers.limit());
+                leftovers.limit(leftovers.array().length);
+            } while (result.isUnderflow() && (cb.position() == pos));
+            if (result.isError() || result.isMalformed()) {
+                result.throwException();
+            }
+            bb.position(bc.position());
+            leftovers.position(0);
+        }
+        // Do the decoding and get the results into the byte chunk and the char
+        // chunk
+        result = decoder.decode(bb, cb, endOfInput);
+        if (result.isError() || result.isMalformed()) {
+            result.throwException();
+        } else if (result.isOverflow()) {
+            // Propagate current positions to the byte chunk and char chunk, if
+            // this continues the char buffer will get resized
+            bc.position(bb.position());
+            cc.limit(cb.position());
+        } else if (result.isUnderflow()) {
+            // Propagate current positions to the byte chunk and char chunk
+            bc.position(bb.position());
+            cc.limit(cb.position());
+            // Put leftovers in the leftovers byte buffer
+            if (bc.remaining() > 0) {
+                leftovers.limit(leftovers.array().length);
+                leftovers.position(bc.remaining());
+                bc.get(leftovers.array(), 0, bc.remaining());
+            }
+        }
+    }
+
+
+    public Charset getCharset() {
+        return decoder.charset();
     }
 }

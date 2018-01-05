@@ -71,7 +71,7 @@ public class PojoMethodMapping {
 
 
     public PojoMethodMapping(Class<?> clazzPojo,
-            Class<? extends Decoder>[] decoderClazzes, String wsPath)
+            List<Class<? extends Decoder>> decoderClazzes, String wsPath)
                     throws DeploymentException {
 
         this.wsPath = wsPath;
@@ -94,7 +94,7 @@ public class PojoMethodMapping {
                         open = method;
                     } else {
                         if (currentClazz == clazzPojo ||
-                                (currentClazz != clazzPojo && !isMethodOverride(open, method))) {
+                                !isMethodOverride(open, method)) {
                             // Duplicate annotation
                             throw new DeploymentException(sm.getString(
                                     "pojoMethodMapping.duplicateAnnotation",
@@ -107,7 +107,7 @@ public class PojoMethodMapping {
                         close = method;
                     } else {
                         if (currentClazz == clazzPojo ||
-                                (currentClazz != clazzPojo && !isMethodOverride(close, method))) {
+                                !isMethodOverride(close, method)) {
                             // Duplicate annotation
                             throw new DeploymentException(sm.getString(
                                     "pojoMethodMapping.duplicateAnnotation",
@@ -120,7 +120,7 @@ public class PojoMethodMapping {
                         error = method;
                     } else {
                         if (currentClazz == clazzPojo ||
-                                (currentClazz != clazzPojo && !isMethodOverride(error, method))) {
+                                !isMethodOverride(error, method)) {
                             // Duplicate annotation
                             throw new DeploymentException(sm.getString(
                                     "pojoMethodMapping.duplicateAnnotation",
@@ -135,8 +135,7 @@ public class PojoMethodMapping {
                         if (messageHandler.targetsSameWebSocketMessageType(otherMessageHandler)) {
                             found = true;
                             if (currentClazz == clazzPojo ||
-                                    (currentClazz != clazzPojo
-                                    && !isMethodOverride(messageHandler.m, otherMessageHandler.m))) {
+                                !isMethodOverride(messageHandler.m, otherMessageHandler.m)) {
                                 // Duplicate annotation
                                 throw new DeploymentException(sm.getString(
                                         "pojoMethodMapping.duplicateAnnotation",
@@ -198,9 +197,9 @@ public class PojoMethodMapping {
 
 
     private boolean isMethodOverride(Method method1, Method method2) {
-        return (method1.getName().equals(method2.getName())
+        return method1.getName().equals(method2.getName())
                 && method1.getReturnType().equals(method2.getReturnType())
-                && Arrays.equals(method1.getParameterTypes(), method2.getParameterTypes()));
+                && Arrays.equals(method1.getParameterTypes(), method2.getParameterTypes());
     }
 
 
@@ -254,6 +253,11 @@ public class PojoMethodMapping {
             Session session, Throwable throwable) throws DecodeException {
         return buildArgs(onErrorParams, pathParameters, session, null,
                 throwable, null);
+    }
+
+
+    public boolean hasMessageHandlers() {
+        return !onMessage.isEmpty();
     }
 
 
@@ -718,7 +722,7 @@ public class PojoMethodMapping {
     }
 
 
-    private static enum MethodType {
+    private enum MethodType {
         ON_OPEN,
         ON_CLOSE,
         ON_ERROR

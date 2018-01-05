@@ -31,6 +31,8 @@ import java.net.URLClassLoader;
 import java.security.AccessControlException;
 import java.util.Random;
 
+import javax.management.InstanceNotFoundException;
+import javax.management.MBeanException;
 import javax.management.ObjectName;
 
 import org.apache.catalina.Context;
@@ -147,7 +149,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
     /**
      * The property change support for this component.
      */
-    protected final PropertyChangeSupport support = new PropertyChangeSupport(this);
+    final PropertyChangeSupport support = new PropertyChangeSupport(this);
 
     private volatile boolean stopAwait = false;
 
@@ -185,9 +187,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
      */
     @Override
     public javax.naming.Context getGlobalNamingContext() {
-
-        return (this.globalNamingContext);
-
+        return this.globalNamingContext;
     }
 
 
@@ -196,11 +196,8 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
      *
      * @param globalNamingContext The new global naming resource context
      */
-    public void setGlobalNamingContext
-        (javax.naming.Context globalNamingContext) {
-
+    public void setGlobalNamingContext(javax.naming.Context globalNamingContext) {
         this.globalNamingContext = globalNamingContext;
-
     }
 
 
@@ -209,9 +206,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
      */
     @Override
     public NamingResourcesImpl getGlobalNamingResources() {
-
-        return (this.globalNamingResources);
-
+        return this.globalNamingResources;
     }
 
 
@@ -240,18 +235,34 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
      * @return Tomcat release identifier
      */
     public String getServerInfo() {
-
         return ServerInfo.getServerInfo();
     }
+
+
+    /**
+     * Return the current server built timestamp
+     * @return server built timestamp.
+     */
+    public String getServerBuilt() {
+        return ServerInfo.getServerBuilt();
+    }
+
+
+    /**
+     * Return the current server's version number.
+     * @return server's version number.
+     */
+    public String getServerNumber() {
+        return ServerInfo.getServerNumber();
+    }
+
 
     /**
      * Return the port number we listen to for shutdown commands.
      */
     @Override
     public int getPort() {
-
-        return (this.port);
-
+        return this.port;
     }
 
 
@@ -262,9 +273,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
      */
     @Override
     public void setPort(int port) {
-
         this.port = port;
-
     }
 
 
@@ -273,9 +282,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
      */
     @Override
     public String getAddress() {
-
-        return (this.address);
-
+        return this.address;
     }
 
 
@@ -286,9 +293,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
      */
     @Override
     public void setAddress(String address) {
-
         this.address = address;
-
     }
 
     /**
@@ -296,9 +301,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
      */
     @Override
     public String getShutdown() {
-
-        return (this.shutdown);
-
+        return this.shutdown;
     }
 
 
@@ -309,9 +312,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
      */
     @Override
     public void setShutdown(String shutdown) {
-
         this.shutdown = shutdown;
-
     }
 
 
@@ -480,8 +481,10 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
                             log.warn("StandardServer.await: read: ", e);
                             ch = -1;
                         }
-                        if (ch < 32)  // Control character or EOF terminates loop
+                        // Control character or EOF (-1) terminates loop
+                        if (ch < 32 || ch == 127) {
                             break;
+                        }
                         command.append((char) ch);
                         expected--;
                     }
@@ -523,31 +526,29 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
 
 
     /**
-     * Return the specified Service (if it exists); otherwise return
+     * @return the specified Service (if it exists); otherwise return
      * <code>null</code>.
      *
      * @param name Name of the Service to be returned
      */
     @Override
     public Service findService(String name) {
-
         if (name == null) {
-            return (null);
+            return null;
         }
         synchronized (servicesLock) {
             for (int i = 0; i < services.length; i++) {
                 if (name.equals(services[i].getName())) {
-                    return (services[i]);
+                    return services[i];
                 }
             }
         }
-        return (null);
-
+        return null;
     }
 
 
     /**
-     * Return the set of Services defined within this Server.
+     * @return the set of Services defined within this Server.
      */
     @Override
     public Service[] findServices() {
@@ -557,7 +558,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
     }
 
     /**
-     * Return the JMX service names.
+     * @return the JMX service names.
      */
     public ObjectName[] getServiceNames() {
         ObjectName onames[]=new ObjectName[ services.length ];
@@ -667,12 +668,10 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
      */
     @Override
     public String toString() {
-
         StringBuilder sb = new StringBuilder("StandardServer[");
         sb.append(getPort());
         sb.append("]");
-        return (sb.toString());
-
+        return sb.toString();
     }
 
 
@@ -680,15 +679,15 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
      * Write the configuration information for this entire <code>Server</code>
      * out to the server.xml configuration file.
      *
-     * @exception   javax.management.InstanceNotFoundException
-     *              if the managed resource object cannot be found
-     * @exception   javax.management.MBeanException
-     *              if the initializer of the object throws an exception, or
-     *              persistence is not supported
-     * @exception   javax.management.RuntimeOperationsException
-     *              if an exception is reported by the persistence mechanism
+     * @exception InstanceNotFoundException
+     *            if the managed resource object cannot be found
+     * @exception MBeanException
+     *            if the initializer of the object throws an exception, or
+     *            persistence is not supported
+     * @exception javax.management.RuntimeOperationsException
+     *            if an exception is reported by the persistence mechanism
      */
-    public synchronized void storeConfig() throws Exception {
+    public synchronized void storeConfig() throws InstanceNotFoundException, MBeanException {
         try {
             // Note: Hard-coded domain used since this object is per Server/JVM
             ObjectName sname = new ObjectName("Catalina:type=StoreConfig");
@@ -708,14 +707,16 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
      * Write the configuration information for <code>Context</code>
      * out to the specified configuration file.
      *
-     * @exception javax.management.InstanceNotFoundException if the managed resource object
-     *  cannot be found
-     * @exception javax.management.MBeanException if the initializer of the object throws
-     *  an exception, or persistence is not supported
-     * @exception javax.management.RuntimeOperationsException if an exception is reported
-     *  by the persistence mechanism
+     * @param context the context which should save its configuration
+     * @exception InstanceNotFoundException
+     *            if the managed resource object cannot be found
+     * @exception MBeanException
+     *            if the initializer of the object throws an exception
+     *            or persistence is not supported
+     * @exception javax.management.RuntimeOperationsException
+     *            if an exception is reported by the persistence mechanism
      */
-    public synchronized void storeContext(Context context) throws Exception {
+    public synchronized void storeContext(Context context) throws InstanceNotFoundException, MBeanException {
         try {
             // Note: Hard-coded domain used since this object is per Server/JVM
             ObjectName sname = new ObjectName("Catalina:type=StoreConfig");
@@ -734,7 +735,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
 
 
     /**
-     * Return true if naming should be used.
+     * @return <code>true</code> if naming should be used.
      */
     private boolean isUseNaming() {
         boolean useNaming = true;
@@ -874,11 +875,11 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
     @Override
     public ClassLoader getParentClassLoader() {
         if (parentClassLoader != null)
-            return (parentClassLoader);
+            return parentClassLoader;
         if (catalina != null) {
-            return (catalina.getParentClassLoader());
+            return catalina.getParentClassLoader();
         }
-        return (ClassLoader.getSystemClassLoader());
+        return ClassLoader.getSystemClassLoader();
     }
 
     /**

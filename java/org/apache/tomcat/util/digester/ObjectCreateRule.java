@@ -41,7 +41,7 @@ public class ObjectCreateRule extends Rule {
      */
     public ObjectCreateRule(String className) {
 
-        this(className, (String) null);
+        this(className, null);
 
     }
 
@@ -114,7 +114,7 @@ public class ObjectCreateRule extends Rule {
 
         // Instantiate the new object and push it on the context stack
         Class<?> clazz = digester.getClassLoader().loadClass(realClassName);
-        Object instance = clazz.newInstance();
+        Object instance = clazz.getConstructor().newInstance();
         digester.push(instance);
     }
 
@@ -145,15 +145,13 @@ public class ObjectCreateRule extends Rule {
      */
     @Override
     public String toString() {
-
         StringBuilder sb = new StringBuilder("ObjectCreateRule[");
         sb.append("className=");
         sb.append(className);
         sb.append(", attributeName=");
         sb.append(attributeName);
         sb.append("]");
-        return (sb.toString());
-
+        return sb.toString();
     }
 
 

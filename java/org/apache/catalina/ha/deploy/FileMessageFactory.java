@@ -310,12 +310,12 @@ public class FileMessageFactory {
         if (in != null)
             try {
                 in.close();
-            } catch (Exception ignore) {
+            } catch (IOException ignore) {
             }
         if (out != null)
             try {
                 out.close();
-            } catch (Exception ignore) {
+            } catch (IOException ignore) {
             }
         in = null;
         out = null;
@@ -333,9 +333,8 @@ public class FileMessageFactory {
      * asked to do. Invoked by readMessage/writeMessage before those methods
      * proceed.
      *
-     * @param openForWrite
-     *            boolean
-     * @throws IllegalArgumentException
+     * @param openForWrite The value to check
+     * @throws IllegalArgumentException if the state is not the expected one
      */
     protected void checkState(boolean openForWrite)
             throws IllegalArgumentException {
@@ -360,7 +359,7 @@ public class FileMessageFactory {
      * @param args
      *            String[], args[0] - read from filename, args[1] write to
      *            filename
-     * @throws Exception
+     * @throws Exception An error occurred
      */
     public static void main(String[] args) throws Exception {
 
@@ -397,7 +396,9 @@ public class FileMessageFactory {
             int timeIdle = (int) ((timeNow - creationTime) / 1000L);
             if (timeIdle > maxValidTime) {
                 cleanup();
-                if (file.exists()) file.delete();
+                if (file.exists() && !file.delete()) {
+                    log.warn(sm.getString("fileMessageFactory.deleteFail", file));
+                }
                 return false;
             }
         }

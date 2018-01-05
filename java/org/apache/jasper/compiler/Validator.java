@@ -22,7 +22,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import javax.el.ELException;
 import javax.el.ExpressionFactory;
@@ -40,6 +42,7 @@ import javax.servlet.jsp.tagext.ValidationMessage;
 import org.apache.jasper.JasperException;
 import org.apache.jasper.compiler.ELNode.Text;
 import org.apache.jasper.el.ELContextImpl;
+import org.apache.tomcat.util.security.Escape;
 import org.xml.sax.Attributes;
 
 /**
@@ -997,7 +1000,7 @@ class Validator {
             }
 
             if (doctypePublic != null && doctypeSystem == null) {
-                err.jspError(n, "jsp.error.jspoutput.doctypepulicsystem");
+                err.jspError(n, "jsp.error.jspoutput.doctypepublicsystem");
             }
 
             if (omitXmlDecl != null) {
@@ -1403,7 +1406,7 @@ class Validator {
                             el.visit(v);
                             value = v.getText();
                         } else {
-                            value = xmlEscape(value);
+                            value = Escape.xml(value);
                         }
                     }
 
@@ -1452,7 +1455,7 @@ class Validator {
             @Override
             public void visit(Text n) throws JasperException {
                 output.append(ELParser.escapeLiteralExpression(
-                        xmlEscape(n.getText()),
+                        Escape.xml(n.getText()),
                         isDeferredSyntaxAllowedAsLiteral));
             }
         }
@@ -1620,7 +1623,7 @@ class Validator {
             try {
                 ef.createValueExpression(ctx, expr, Object.class);
             } catch (ELException e) {
-
+                throw new JasperException(e);
             }
         }
 
@@ -1660,7 +1663,7 @@ class Validator {
                 throws JasperException {
             FunctionInfo funcInfo = func.getFunctionInfo();
             String signature = funcInfo.getFunctionSignature();
-            ArrayList<String> params = new ArrayList<>();
+            List<String> params = new ArrayList<>();
             // Signature is of the form
             // <return-type> S <method-name S? '('
             // < <arg-type> ( ',' <arg-type> )* )? ')'
@@ -1693,7 +1696,7 @@ class Validator {
 
             class ValidateFunctionMapper extends FunctionMapper {
 
-                private HashMap<String, Method> fnmap = new HashMap<>();
+                private Map<String, Method> fnmap = new HashMap<>();
 
                 @Override
                 public void mapFunction(String prefix, String localName,
@@ -1718,7 +1721,7 @@ class Validator {
                 @Override
                 public void visit(ELNode.Function n) throws JasperException {
 
-                    // Lambda / ImportHandler defined fucntion
+                    // Lambda / ImportHandler defined function
                     if (n.getFunctionInfo() == null) {
                         return;
                     }
@@ -1819,7 +1822,7 @@ class Validator {
         PageInfo pageInfo = compiler.getPageInfo();
         String contentType = pageInfo.getContentType();
 
-        if (contentType == null || contentType.indexOf("charset=") < 0) {
+        if (contentType == null || !contentType.contains("charset=")) {
             boolean isXml = page.getRoot().isXmlSyntax();
             String defaultType;
             if (contentType == null) {
@@ -1912,68 +1915,5 @@ class Validator {
         if (errMsg != null) {
             errDisp.jspError(errMsg.toString());
         }
-    }
-
-    protected static String xmlEscape(String s) {
-        if (s == null) {
-            return null;
-        }
-        int len = s.length();
-
-        /*
-         * Look for any "bad" characters, Escape "bad" character was found
-         */
-        // ASCII " 34 & 38 ' 39 < 60 > 62
-        for (int i = 0; i < len; i++) {
-            char c = s.charAt(i);
-            if (c >= '\"' && c <= '>' &&
-                    (c == '<' || c == '>' || c == '\'' || c == '&' || c == '"')) {
-                // need to escape them and then quote the whole string
-                StringBuilder sb = new StringBuilder((int) (len * 1.2));
-                sb.append(s, 0, i);
-                int pos = i + 1;
-                for (int j = i; j < len; j++) {
-                    c = s.charAt(j);
-                    if (c >= '\"' && c <= '>') {
-                        if (c == '<') {
-                            if (j > pos) {
-                                sb.append(s, pos, j);
-                            }
-                            sb.append("&lt;");
-                            pos = j + 1;
-                        } else if (c == '>') {
-                            if (j > pos) {
-                                sb.append(s, pos, j);
-                            }
-                            sb.append("&gt;");
-                            pos = j + 1;
-                        } else if (c == '\'') {
-                            if (j > pos) {
-                                sb.append(s, pos, j);
-                            }
-                            sb.append("&#039;"); // &apos;
-                            pos = j + 1;
-                        } else if (c == '&') {
-                            if (j > pos) {
-                                sb.append(s, pos, j);
-                            }
-                            sb.append("&amp;");
-                            pos = j + 1;
-                        } else if (c == '"') {
-                            if (j > pos) {
-                                sb.append(s, pos, j);
-                            }
-                            sb.append("&#034;"); // &quot;
-                            pos = j + 1;
-                        }
-                    }
-                }
-                if (pos < len) {
-                    sb.append(s, pos, len);
-                }
-                return sb.toString();
-            }
-        }
-        return s;
     }
 }

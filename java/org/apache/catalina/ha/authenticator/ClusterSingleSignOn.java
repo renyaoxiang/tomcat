@@ -31,6 +31,7 @@ import org.apache.catalina.tribes.Channel;
 import org.apache.catalina.tribes.tipis.AbstractReplicatedMap.MapOwner;
 import org.apache.catalina.tribes.tipis.ReplicatedMap;
 import org.apache.tomcat.util.ExceptionUtils;
+import org.apache.tomcat.util.res.StringManager;
 
 /**
  * A <strong>Valve</strong> that supports a "single sign on" user experience on
@@ -52,6 +53,8 @@ import org.apache.tomcat.util.ExceptionUtils;
  * @author Fabien Carrion
  */
 public class ClusterSingleSignOn extends SingleSignOn implements ClusterValve, MapOwner {
+
+    private static final StringManager sm = StringManager.getManager(ClusterSingleSignOn.class);
 
     // -------------------------------------------------------------- Properties
 
@@ -92,6 +95,14 @@ public class ClusterSingleSignOn extends SingleSignOn implements ClusterValve, M
         this.terminateOnStartFailure = terminateOnStartFailure;
     }
 
+    private long accessTimeout = 5000;
+    public long getAccessTimeout() {
+        return accessTimeout;
+    }
+
+    public void setAccessTimeout(long accessTimeout) {
+        this.accessTimeout = accessTimeout;
+    }
 
     // ---------------------------------------------------- SingleSignOn Methods
 
@@ -151,8 +162,7 @@ public class ClusterSingleSignOn extends SingleSignOn implements ClusterValve, M
                 }
             }
             if (cluster == null) {
-                throw new LifecycleException(
-                        "There is no Cluster for ClusterSingleSignOn");
+                throw new LifecycleException(sm.getString("clusterSingleSignOn.nocluster"));
             }
 
             ClassLoader[] cls = new ClassLoader[] { this.getClass().getClassLoader() };
@@ -161,11 +171,11 @@ public class ClusterSingleSignOn extends SingleSignOn implements ClusterValve, M
                     this, cluster.getChannel(), rpcTimeout, cluster.getClusterName() + "-SSO-cache",
                     cls, terminateOnStartFailure);
             cache.setChannelSendOptions(mapSendOptions);
+            cache.setAccessTimeout(accessTimeout);
             this.cache = cache;
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
-            throw new LifecycleException(
-                    "ClusterSingleSignOn exception during clusterLoad " + t);
+            throw new LifecycleException(sm.getString("clusterSingleSignOn.clusterLoad.fail"), t);
         }
 
         super.startInternal();

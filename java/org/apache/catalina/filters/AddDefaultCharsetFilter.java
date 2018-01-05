@@ -108,7 +108,7 @@ public class AddDefaultCharsetFilter extends FilterBase {
         public void setContentType(String ct) {
 
             if (ct != null && ct.startsWith("text/")) {
-                if (ct.indexOf("charset=") < 0) {
+                if (!ct.contains("charset=")) {
                     super.setContentType(ct + ";charset=" + encoding);
                 } else {
                     super.setContentType(ct);
@@ -118,6 +118,24 @@ public class AddDefaultCharsetFilter extends FilterBase {
                 super.setContentType(ct);
             }
 
+        }
+
+        @Override
+        public void setHeader(String name, String value) {
+            if (name.trim().equalsIgnoreCase("content-type")) {
+                setContentType(value);
+            } else {
+                super.setHeader(name, value);
+            }
+        }
+
+        @Override
+        public void addHeader(String name, String value) {
+            if (name.trim().equalsIgnoreCase("content-type")) {
+                setContentType(value);
+            } else {
+                super.setHeader(name, value);
+            }
         }
 
         @Override

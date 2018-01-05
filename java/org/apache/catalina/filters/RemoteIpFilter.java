@@ -18,8 +18,8 @@ package org.apache.catalina.filters;
 
 import java.io.IOException;
 import java.text.DateFormat;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.Enumeration;
@@ -31,18 +31,21 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-import javax.servlet.Filter;
 import javax.servlet.FilterChain;
-import javax.servlet.FilterConfig;
+import javax.servlet.GenericFilter;
 import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
+import javax.servlet.ServletRequestWrapper;
 import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletRequestWrapper;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.PushBuilder;
 
 import org.apache.catalina.AccessLog;
 import org.apache.catalina.Globals;
+import org.apache.catalina.connector.RequestFacade;
+import org.apache.catalina.util.RequestUtil;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
 
@@ -161,7 +164,6 @@ import org.apache.juli.logging.LogFactory;
  * <td>443</td>
  * </tr>
  * </table>
- * <p>
  * <p>
  * <strong>Regular expression vs. IP address blocks:</strong> <code>mod_remoteip</code> allows to use address blocks (e.g.
  * <code>192.168/16</code>) to configure <code>RemoteIPInternalProxy</code> and <code>RemoteIPTrustedProxy</code> ; as the JVM doesn't have a
@@ -436,7 +438,10 @@ import org.apache.juli.logging.LogFactory;
  * </p>
  * <hr>
  */
-public class RemoteIpFilter implements Filter {
+public class RemoteIpFilter extends GenericFilter {
+
+    private static final long serialVersionUID = 1L;
+
     public static class XForwardedRequest extends HttpServletRequestWrapper {
 
         static final ThreadLocal<SimpleDateFormat[]> threadLocalDateFormats = new ThreadLocal<SimpleDateFormat[]>() {
@@ -493,7 +498,7 @@ public class RemoteIpFilter implements Filter {
                 DateFormat dateFormat = dateFormats[i];
                 try {
                     date = dateFormat.parse(value);
-                } catch (Exception ParseException) {
+                } catch (ParseException ex) {
                     // Ignore
                 }
             }
@@ -582,7 +587,7 @@ public class RemoteIpFilter implements Filter {
         }
 
         public void setHeader(String name, String value) {
-            List<String> values = Arrays.asList(value);
+            List<String> values = Collections.singletonList(value);
             Map.Entry<String, List<String>> header = getHeaderEntry(name);
             if (header == null) {
                 headers.put(name, values);
@@ -615,7 +620,26 @@ public class RemoteIpFilter implements Filter {
         public void setServerPort(int serverPort) {
             this.serverPort = serverPort;
         }
+
+        @Override
+        public StringBuffer getRequestURL() {
+            return RequestUtil.getRequestURL(this);
+        }
+
+        @Override
+        public PushBuilder newPushBuilder() {
+            ServletRequest current = getRequest();
+            while (current instanceof ServletRequestWrapper) {
+                current = ((ServletRequestWrapper) current).getRequest();
+            }
+            if (current instanceof RequestFacade) {
+                return ((RequestFacade) current).newPushBuilder(this);
+            } else {
+                return null;
+            }
+        }
     }
+
 
     /**
      * {@link Pattern} for a comma delimited string that support whitespace characters
@@ -650,6 +674,7 @@ public class RemoteIpFilter implements Filter {
     /**
      * Convert a given comma delimited list of regular expressions into an array of String
      *
+     * @param commaDelimitedStrings The string to split
      * @return array of patterns (non <code>null</code>)
      */
     protected static String[] commaDelimitedListToStringArray(String commaDelimitedStrings) {
@@ -658,7 +683,10 @@ public class RemoteIpFilter implements Filter {
     }
 
     /**
-     * Convert an array of strings in a comma delimited string
+     * Convert a list of strings in a comma delimited string.
+     *
+     * @param stringList List of strings
+     * @return concatenated string
      */
     protected static String listToCommaDelimitedString(List<String> stringList) {
         if (stringList == null) {
@@ -729,11 +757,6 @@ public class RemoteIpFilter implements Filter {
      * @see #setTrustedProxies(String)
      */
     private Pattern trustedProxies = null;
-
-    @Override
-    public void destroy() {
-        // NOOP
-    }
 
     public void doFilter(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws IOException, ServletException {
 
@@ -863,7 +886,8 @@ public class RemoteIpFilter implements Filter {
     }
 
     /**
-     * Wrap the incoming <code>request</code> in a {@link XForwardedRequest} if the http header <code>x-forwareded-for</code> is not empty.
+     * Wrap the incoming <code>request</code> in a {@link XForwardedRequest} if the http header <code>x-forwarded-for</code> is not empty.
+     * {@inheritDoc}
      */
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException {
@@ -920,50 +944,50 @@ public class RemoteIpFilter implements Filter {
     }
 
     @Override
-    public void init(FilterConfig filterConfig) throws ServletException {
-        if (filterConfig.getInitParameter(INTERNAL_PROXIES_PARAMETER) != null) {
-            setInternalProxies(filterConfig.getInitParameter(INTERNAL_PROXIES_PARAMETER));
+    public void init() throws ServletException {
+        if (getInitParameter(INTERNAL_PROXIES_PARAMETER) != null) {
+            setInternalProxies(getInitParameter(INTERNAL_PROXIES_PARAMETER));
         }
 
-        if (filterConfig.getInitParameter(PROTOCOL_HEADER_PARAMETER) != null) {
-            setProtocolHeader(filterConfig.getInitParameter(PROTOCOL_HEADER_PARAMETER));
+        if (getInitParameter(PROTOCOL_HEADER_PARAMETER) != null) {
+            setProtocolHeader(getInitParameter(PROTOCOL_HEADER_PARAMETER));
         }
 
-        if (filterConfig.getInitParameter(PROTOCOL_HEADER_HTTPS_VALUE_PARAMETER) != null) {
-            setProtocolHeaderHttpsValue(filterConfig.getInitParameter(PROTOCOL_HEADER_HTTPS_VALUE_PARAMETER));
+        if (getInitParameter(PROTOCOL_HEADER_HTTPS_VALUE_PARAMETER) != null) {
+            setProtocolHeaderHttpsValue(getInitParameter(PROTOCOL_HEADER_HTTPS_VALUE_PARAMETER));
         }
 
-        if (filterConfig.getInitParameter(PORT_HEADER_PARAMETER) != null) {
-            setPortHeader(filterConfig.getInitParameter(PORT_HEADER_PARAMETER));
+        if (getInitParameter(PORT_HEADER_PARAMETER) != null) {
+            setPortHeader(getInitParameter(PORT_HEADER_PARAMETER));
         }
 
-        if (filterConfig.getInitParameter(CHANGE_LOCAL_PORT_PARAMETER) != null) {
-            setChangeLocalPort(Boolean.parseBoolean(filterConfig.getInitParameter(CHANGE_LOCAL_PORT_PARAMETER)));
+        if (getInitParameter(CHANGE_LOCAL_PORT_PARAMETER) != null) {
+            setChangeLocalPort(Boolean.parseBoolean(getInitParameter(CHANGE_LOCAL_PORT_PARAMETER)));
         }
 
-        if (filterConfig.getInitParameter(PROXIES_HEADER_PARAMETER) != null) {
-            setProxiesHeader(filterConfig.getInitParameter(PROXIES_HEADER_PARAMETER));
+        if (getInitParameter(PROXIES_HEADER_PARAMETER) != null) {
+            setProxiesHeader(getInitParameter(PROXIES_HEADER_PARAMETER));
         }
 
-        if (filterConfig.getInitParameter(REMOTE_IP_HEADER_PARAMETER) != null) {
-            setRemoteIpHeader(filterConfig.getInitParameter(REMOTE_IP_HEADER_PARAMETER));
+        if (getInitParameter(REMOTE_IP_HEADER_PARAMETER) != null) {
+            setRemoteIpHeader(getInitParameter(REMOTE_IP_HEADER_PARAMETER));
         }
 
-        if (filterConfig.getInitParameter(TRUSTED_PROXIES_PARAMETER) != null) {
-            setTrustedProxies(filterConfig.getInitParameter(TRUSTED_PROXIES_PARAMETER));
+        if (getInitParameter(TRUSTED_PROXIES_PARAMETER) != null) {
+            setTrustedProxies(getInitParameter(TRUSTED_PROXIES_PARAMETER));
         }
 
-        if (filterConfig.getInitParameter(HTTP_SERVER_PORT_PARAMETER) != null) {
+        if (getInitParameter(HTTP_SERVER_PORT_PARAMETER) != null) {
             try {
-                setHttpServerPort(Integer.parseInt(filterConfig.getInitParameter(HTTP_SERVER_PORT_PARAMETER)));
+                setHttpServerPort(Integer.parseInt(getInitParameter(HTTP_SERVER_PORT_PARAMETER)));
             } catch (NumberFormatException e) {
                 throw new NumberFormatException("Illegal " + HTTP_SERVER_PORT_PARAMETER + " : " + e.getMessage());
             }
         }
 
-        if (filterConfig.getInitParameter(HTTPS_SERVER_PORT_PARAMETER) != null) {
+        if (getInitParameter(HTTPS_SERVER_PORT_PARAMETER) != null) {
             try {
-                setHttpsServerPort(Integer.parseInt(filterConfig.getInitParameter(HTTPS_SERVER_PORT_PARAMETER)));
+                setHttpsServerPort(Integer.parseInt(getInitParameter(HTTPS_SERVER_PORT_PARAMETER)));
             } catch (NumberFormatException e) {
                 throw new NumberFormatException("Illegal " + HTTPS_SERVER_PORT_PARAMETER + " : " + e.getMessage());
             }
@@ -974,12 +998,13 @@ public class RemoteIpFilter implements Filter {
      * <p>
      * If <code>true</code>, the return values for both {@link
      * ServletRequest#getLocalPort()} and {@link ServletRequest#getServerPort()}
-     * wil be modified by this Filter rather than just
+     * will be modified by this Filter rather than just
      * {@link ServletRequest#getServerPort()}.
      * </p>
      * <p>
      * Default value : <code>false</code>
      * </p>
+     * @param changeLocalPort The new flag value
      */
     public void setChangeLocalPort(boolean changeLocalPort) {
         this.changeLocalPort = changeLocalPort;
@@ -993,6 +1018,7 @@ public class RemoteIpFilter implements Filter {
      * <p>
      * Default value : 80
      * </p>
+     * @param httpServerPort The server port to use
      */
     public void setHttpServerPort(int httpServerPort) {
         this.httpServerPort = httpServerPort;
@@ -1005,6 +1031,7 @@ public class RemoteIpFilter implements Filter {
      * <p>
      * Default value : 443
      * </p>
+     * @param httpsServerPort The server port to use
      */
     public void setHttpsServerPort(int httpsServerPort) {
         this.httpsServerPort = httpsServerPort;
@@ -1017,6 +1044,7 @@ public class RemoteIpFilter implements Filter {
      * <p>
      * Default value : 10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|169\.254.\d{1,3}.\d{1,3}|127\.\d{1,3}\.\d{1,3}\.\d{1,3}
      * </p>
+     * @param internalProxies The regexp
      */
     public void setInternalProxies(String internalProxies) {
         if (internalProxies == null || internalProxies.length() == 0) {
@@ -1028,13 +1056,14 @@ public class RemoteIpFilter implements Filter {
 
     /**
      * <p>
-     * Header that holds the incoming port, usally named
+     * Header that holds the incoming port, usually named
      * <code>X-Forwarded-Port</code>. If <code>null</code>,
      * {@link #httpServerPort} or {@link #httpsServerPort} will be used.
      * </p>
      * <p>
      * Default value : <code>null</code>
      * </p>
+     * @param portHeader The header name
      */
     public void setPortHeader(String portHeader) {
         this.portHeader = portHeader;
@@ -1042,12 +1071,13 @@ public class RemoteIpFilter implements Filter {
 
     /**
      * <p>
-     * Header that holds the incoming protocol, usally named <code>X-Forwarded-Proto</code>. If <code>null</code>, request.scheme and
+     * Header that holds the incoming protocol, usually named <code>X-Forwarded-Proto</code>. If <code>null</code>, request.scheme and
      * request.secure will not be modified.
      * </p>
      * <p>
      * Default value : <code>null</code>
      * </p>
+     * @param protocolHeader The header name
      */
     public void setProtocolHeader(String protocolHeader) {
         this.protocolHeader = protocolHeader;
@@ -1060,6 +1090,7 @@ public class RemoteIpFilter implements Filter {
      * <p>
      * Default value : <code>https</code>
      * </p>
+     * @param protocolHeaderHttpsValue The header value
      */
     public void setProtocolHeaderHttpsValue(String protocolHeaderHttpsValue) {
         this.protocolHeaderHttpsValue = protocolHeaderHttpsValue;
@@ -1080,6 +1111,7 @@ public class RemoteIpFilter implements Filter {
      * <p>
      * Default value : <code>X-Forwarded-By</code>
      * </p>
+     * @param proxiesHeader The header name
      */
     public void setProxiesHeader(String proxiesHeader) {
         this.proxiesHeader = proxiesHeader;
@@ -1095,6 +1127,7 @@ public class RemoteIpFilter implements Filter {
      * <p>
      * Default value : <code>X-Forwarded-For</code>
      * </p>
+     * @param remoteIpHeader The header name
      */
     public void setRemoteIpHeader(String remoteIpHeader) {
         this.remoteIpHeader = remoteIpHeader;
@@ -1131,6 +1164,7 @@ public class RemoteIpFilter implements Filter {
      * <p>
      * Default value : empty list, no external proxy is trusted.
      * </p>
+     * @param trustedProxies The trusted proxies regexp
      */
     public void setTrustedProxies(String trustedProxies) {
         if (trustedProxies == null || trustedProxies.length() == 0) {

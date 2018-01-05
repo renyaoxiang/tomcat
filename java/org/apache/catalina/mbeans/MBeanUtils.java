@@ -91,7 +91,7 @@ public class MBeanUtils {
         String className = component.getClass().getName();
         for (int i = 0; i < exceptions.length; i++) {
             if (className.equals(exceptions[i][0])) {
-                return (exceptions[i][1]);
+                return exceptions[i][1];
             }
         }
 
@@ -99,7 +99,7 @@ public class MBeanUtils {
         int period = className.lastIndexOf('.');
         if (period >= 0)
             className = className.substring(period + 1);
-        return (className);
+        return className;
 
     }
 
@@ -109,7 +109,7 @@ public class MBeanUtils {
      * <code>ContextEnvironment</code> object.
      *
      * @param environment The ContextEnvironment to be managed
-     *
+     * @return a new MBean
      * @exception Exception if an MBean cannot be created or registered
      */
     public static DynamicMBean createMBean(ContextEnvironment environment)
@@ -130,7 +130,7 @@ public class MBeanUtils {
             mserver.unregisterMBean(oname);
         }
         mserver.registerMBean(mbean, oname);
-        return (mbean);
+        return mbean;
 
     }
 
@@ -140,7 +140,7 @@ public class MBeanUtils {
      * <code>ContextResource</code> object.
      *
      * @param resource The ContextResource to be managed
-     *
+     * @return a new MBean
      * @exception Exception if an MBean cannot be created or registered
      */
     public static DynamicMBean createMBean(ContextResource resource)
@@ -161,7 +161,7 @@ public class MBeanUtils {
             mserver.unregisterMBean(oname);
         }
         mserver.registerMBean(mbean, oname);
-        return (mbean);
+        return mbean;
 
     }
 
@@ -171,7 +171,7 @@ public class MBeanUtils {
      * <code>ContextResourceLink</code> object.
      *
      * @param resourceLink The ContextResourceLink to be managed
-     *
+     * @return a new MBean
      * @exception Exception if an MBean cannot be created or registered
      */
     public static DynamicMBean createMBean(ContextResourceLink resourceLink)
@@ -192,7 +192,7 @@ public class MBeanUtils {
             mserver.unregisterMBean(oname);
         }
         mserver.registerMBean(mbean, oname);
-        return (mbean);
+        return mbean;
 
     }
 
@@ -202,7 +202,7 @@ public class MBeanUtils {
      * <code>Group</code> object.
      *
      * @param group The Group to be managed
-     *
+     * @return a new MBean
      * @exception Exception if an MBean cannot be created or registered
      */
     static DynamicMBean createMBean(Group group)
@@ -223,7 +223,7 @@ public class MBeanUtils {
             mserver.unregisterMBean(oname);
         }
         mserver.registerMBean(mbean, oname);
-        return (mbean);
+        return mbean;
 
     }
 
@@ -233,7 +233,7 @@ public class MBeanUtils {
      * <code>Role</code> object.
      *
      * @param role The Role to be managed
-     *
+     * @return a new MBean
      * @exception Exception if an MBean cannot be created or registered
      */
     static DynamicMBean createMBean(Role role)
@@ -254,7 +254,7 @@ public class MBeanUtils {
             mserver.unregisterMBean(oname);
         }
         mserver.registerMBean(mbean, oname);
-        return (mbean);
+        return mbean;
 
     }
 
@@ -264,7 +264,7 @@ public class MBeanUtils {
      * <code>User</code> object.
      *
      * @param user The User to be managed
-     *
+     * @return a new MBean
      * @exception Exception if an MBean cannot be created or registered
      */
     static DynamicMBean createMBean(User user)
@@ -285,7 +285,7 @@ public class MBeanUtils {
             mserver.unregisterMBean(oname);
         }
         mserver.registerMBean(mbean, oname);
-        return (mbean);
+        return mbean;
 
     }
 
@@ -295,7 +295,7 @@ public class MBeanUtils {
      * <code>UserDatabase</code> object.
      *
      * @param userDatabase The UserDatabase to be managed
-     *
+     * @return a new MBean
      * @exception Exception if an MBean cannot be created or registered
      */
     static DynamicMBean createMBean(UserDatabase userDatabase)
@@ -316,7 +316,7 @@ public class MBeanUtils {
             mserver.unregisterMBean(oname);
         }
         mserver.registerMBean(mbean, oname);
-        return (mbean);
+        return mbean;
 
     }
 
@@ -327,7 +327,7 @@ public class MBeanUtils {
      *
      * @param domain Domain in which this name is to be created
      * @param environment The ContextEnvironment to be named
-     *
+     * @return a new object name
      * @exception MalformedObjectNameException if a name cannot be created
      */
     public static ObjectName createObjectName(String domain,
@@ -349,7 +349,7 @@ public class MBeanUtils {
                         ",context=" + cn.getDisplayName() +
                         ",name=" + environment.getName());
         }
-        return (name);
+        return name;
 
     }
 
@@ -360,7 +360,7 @@ public class MBeanUtils {
      *
      * @param domain Domain in which this name is to be created
      * @param resource The ContextResource to be named
-     *
+     * @return a new object name
      * @exception MalformedObjectNameException if a name cannot be created
      */
     public static ObjectName createObjectName(String domain,
@@ -386,7 +386,7 @@ public class MBeanUtils {
                     ",name=" + quotedResourceName);
         }
 
-        return (name);
+        return name;
 
     }
 
@@ -397,7 +397,7 @@ public class MBeanUtils {
      *
      * @param domain Domain in which this name is to be created
      * @param resourceLink The ContextResourceLink to be named
-     *
+     * @return a new object name
      * @exception MalformedObjectNameException if a name cannot be created
      */
     public static ObjectName createObjectName(String domain,
@@ -423,7 +423,7 @@ public class MBeanUtils {
                     ",name=" + quotedResourceLinkName);
         }
 
-        return (name);
+        return name;
 
     }
 
@@ -434,7 +434,7 @@ public class MBeanUtils {
      *
      * @param domain Domain in which this name is to be created
      * @param group The Group to be named
-     *
+     * @return a new object name
      * @exception MalformedObjectNameException if a name cannot be created
      */
     static ObjectName createObjectName(String domain,
@@ -445,7 +445,7 @@ public class MBeanUtils {
         name = new ObjectName(domain + ":type=Group,groupname=" +
                               ObjectName.quote(group.getGroupname()) +
                               ",database=" + group.getUserDatabase().getId());
-        return (name);
+        return name;
 
     }
 
@@ -456,7 +456,7 @@ public class MBeanUtils {
      *
      * @param domain Domain in which this name is to be created
      * @param loader The Loader to be named
-     *
+     * @return a new object name
      * @exception MalformedObjectNameException if a name cannot be created
      */
     static ObjectName createObjectName(String domain, Loader loader)
@@ -480,19 +480,16 @@ public class MBeanUtils {
      *
      * @param domain Domain in which this name is to be created
      * @param role The Role to be named
-     *
+     * @return a new object name
      * @exception MalformedObjectNameException if a name cannot be created
      */
-    static ObjectName createObjectName(String domain,
-                                              Role role)
-        throws MalformedObjectNameException {
+    static ObjectName createObjectName(String domain, Role role)
+            throws MalformedObjectNameException {
 
-        ObjectName name = null;
-        name = new ObjectName(domain + ":type=Role,rolename=" +
-                              role.getRolename() + ",database=" +
-                              role.getUserDatabase().getId());
-        return (name);
-
+         ObjectName name = new ObjectName(domain + ":type=Role,rolename=" +
+                 ObjectName.quote(role.getRolename()) +
+                 ",database=" + role.getUserDatabase().getId());
+        return name;
     }
 
 
@@ -502,19 +499,16 @@ public class MBeanUtils {
      *
      * @param domain Domain in which this name is to be created
      * @param user The User to be named
-     *
+     * @return a new object name
      * @exception MalformedObjectNameException if a name cannot be created
      */
-    static ObjectName createObjectName(String domain,
-                                              User user)
-        throws MalformedObjectNameException {
+    static ObjectName createObjectName(String domain, User user)
+            throws MalformedObjectNameException {
 
-        ObjectName name = null;
-        name = new ObjectName(domain + ":type=User,username=" +
-                              ObjectName.quote(user.getUsername())
-                              + ",database=" + user.getUserDatabase().getId());
-        return (name);
-
+        ObjectName name = new ObjectName(domain + ":type=User,username=" +
+                ObjectName.quote(user.getUsername()) +
+                ",database=" + user.getUserDatabase().getId());
+        return name;
     }
 
 
@@ -524,7 +518,7 @@ public class MBeanUtils {
      *
      * @param domain Domain in which this name is to be created
      * @param userDatabase The UserDatabase to be named
-     *
+     * @return a new object name
      * @exception MalformedObjectNameException if a name cannot be created
      */
     static ObjectName createObjectName(String domain,
@@ -534,16 +528,16 @@ public class MBeanUtils {
         ObjectName name = null;
         name = new ObjectName(domain + ":type=UserDatabase,database=" +
                               userDatabase.getId());
-        return (name);
+        return name;
 
     }
 
     /**
      * Create and configure (if necessary) and return the registry of
      * managed object descriptions.
+     * @return the singleton registry
      */
     public static synchronized Registry createRegistry() {
-
         if (registry == null) {
             registry = Registry.getRegistry(null, null);
             ClassLoader cl = MBeanUtils.class.getClassLoader();
@@ -564,8 +558,7 @@ public class MBeanUtils {
             registry.loadDescriptors("org.apache.catalina.storeconfig",  cl);
             registry.loadDescriptors("org.apache.tomcat.util.descriptor.web",  cl);
         }
-        return (registry);
-
+        return registry;
     }
 
 
@@ -573,14 +566,13 @@ public class MBeanUtils {
      * Create and configure (if necessary) and return the
      * <code>MBeanServer</code> with which we will be
      * registering our <code>DynamicMBean</code> implementations.
+     * @return the singleton MBean server
      */
     public static synchronized MBeanServer createServer() {
-
         if (mserver == null) {
             mserver = Registry.getRegistry(null, null).getMBeanServer();
         }
-        return (mserver);
-
+        return mserver;
     }
 
 

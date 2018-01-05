@@ -73,7 +73,8 @@ public class TestContextConfig extends TomcatBaseTest {
 
         File appDir =  new File("test/webapp-fragments");
         // app dir is relative to server home
-        tomcat.addWebapp(null, "/test", appDir.getAbsolutePath());
+        Context ctx = tomcat.addWebapp(null, "/test", appDir.getAbsolutePath());
+        skipTldsForResourceJars(ctx);
 
         tomcat.start();
 
@@ -111,7 +112,7 @@ public class TestContextConfig extends TomcatBaseTest {
 
         Tomcat.addServlet(context, "TestServlet",
                 "org.apache.catalina.startup.TesterServletWithLifeCycleMethods");
-        context.addServletMapping("/testServlet", "TestServlet");
+        context.addServletMappingDecoded("/testServlet", "TestServlet");
 
         tomcat.enableNaming();
 
@@ -130,7 +131,7 @@ public class TestContextConfig extends TomcatBaseTest {
 
         Tomcat.addServlet(context, "TestServlet",
                 "org.apache.catalina.startup.TesterServletWithAnnotations");
-        context.addServletMapping("/testServlet", "TestServlet");
+        context.addServletMappingDecoded("/testServlet", "TestServlet");
 
         tomcat.enableNaming();
 
@@ -198,7 +199,8 @@ public class TestContextConfig extends TomcatBaseTest {
 
         if (expectedStatus == HttpServletResponse.SC_OK) {
             String result = res.toString();
-            Assert.assertTrue(result, result.indexOf(expectedBody) > -1);
+            Assert.assertTrue(result, result.contains(expectedBody));
         }
     }
+
 }

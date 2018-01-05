@@ -43,7 +43,7 @@ import org.apache.tomcat.dbcp.pool2.impl.GenericKeyedObjectPoolConfig;
  * <code>PerUserPoolDataSource</code>.  Many of the configuration properties
  * are shared and defined here.  This class is declared public in order
  * to allow particular usage with commons-beanutils; do not make direct
- * use of it outside of commons-dbcp.
+ * use of it outside of <em>commons-dbcp2</em>.
  * </p>
  *
  * <p>
@@ -70,7 +70,7 @@ import org.apache.tomcat.dbcp.pool2.impl.GenericKeyedObjectPoolConfig;
  * The dbcp package contains an adapter,
  * {@link org.apache.tomcat.dbcp.dbcp2.cpdsadapter.DriverAdapterCPDS},
  * that can be used to allow the use of <code>DataSource</code>'s based on this
- * class with jdbc driver implementations that do not supply a
+ * class with JDBC driver implementations that do not supply a
  * <code>ConnectionPoolDataSource</code>, but still
  * provide a {@link java.sql.Driver} implementation.
  * </p>
@@ -84,7 +84,7 @@ import org.apache.tomcat.dbcp.pool2.impl.GenericKeyedObjectPoolConfig;
  * @since 2.0
  */
 public abstract class InstanceKeyDataSource
-        implements DataSource, Referenceable, Serializable {
+        implements DataSource, Referenceable, Serializable, AutoCloseable {
 
     private static final long serialVersionUID = -6819270431752240878L;
 
@@ -186,18 +186,19 @@ public abstract class InstanceKeyDataSource
     /**
      * Close the connection pool being maintained by this datasource.
      */
+    @Override
     public abstract void close() throws Exception;
 
     protected abstract PooledConnectionManager getConnectionManager(UserPassKey upkey);
 
     /* JDBC_4_ANT_KEY_BEGIN */
     @Override
-    public boolean isWrapperFor(Class<?> iface) throws SQLException {
+    public boolean isWrapperFor(final Class<?> iface) throws SQLException {
         return false;
     }
 
     @Override
-    public <T> T unwrap(Class<T> iface) throws SQLException {
+    public <T> T unwrap(final Class<T> iface) throws SQLException {
         throw new SQLException("InstanceKeyDataSource is not a wrapper.");
     }
     /* JDBC_4_ANT_KEY_END */
@@ -212,7 +213,7 @@ public abstract class InstanceKeyDataSource
     // Properties
 
     /**
-     * Gets the default value for
+     * @return the default value for
      * {@link GenericKeyedObjectPoolConfig#getBlockWhenExhausted()} for each per
      * user pool.
      */
@@ -224,15 +225,15 @@ public abstract class InstanceKeyDataSource
      * Sets the default value for
      * {@link GenericKeyedObjectPoolConfig#getBlockWhenExhausted()} for each per
      * user pool.
+     * @param blockWhenExhausted The new value
      */
-    public void setDefaultBlockWhenExhausted(boolean blockWhenExhausted) {
+    public void setDefaultBlockWhenExhausted(final boolean blockWhenExhausted) {
         assertInitializationAllowed();
         this.defaultBlockWhenExhausted = blockWhenExhausted;
     }
 
-
     /**
-     * Gets the default value for
+     * @return the default value for
      * {@link GenericKeyedObjectPoolConfig#getEvictionPolicyClassName()} for
      * each per user pool.
      */
@@ -244,16 +245,16 @@ public abstract class InstanceKeyDataSource
      * Sets the default value for
      * {@link GenericKeyedObjectPoolConfig#getEvictionPolicyClassName()} for
      * each per user pool.
+     * @param evictionPolicyClassName The new value
      */
     public void setDefaultEvictionPolicyClassName(
-            String evictionPolicyClassName) {
+            final String evictionPolicyClassName) {
         assertInitializationAllowed();
         this.defaultEvictionPolicyClassName = evictionPolicyClassName;
     }
 
-
     /**
-     * Gets the default value for
+     * @return the default value for
      * {@link GenericKeyedObjectPoolConfig#getLifo()} for each per user pool.
      */
     public boolean getDefaultLifo() {
@@ -263,15 +264,15 @@ public abstract class InstanceKeyDataSource
     /**
      * Sets the default value for
      * {@link GenericKeyedObjectPoolConfig#getLifo()} for each per user pool.
+     * @param lifo The new value
      */
-    public void setDefaultLifo(boolean lifo) {
+    public void setDefaultLifo(final boolean lifo) {
         assertInitializationAllowed();
         this.defaultLifo = lifo;
     }
 
-
     /**
-     * Gets the default value for
+     * @return the default value for
      * {@link GenericKeyedObjectPoolConfig#getMaxIdlePerKey()} for each per user
      * pool.
      */
@@ -283,15 +284,15 @@ public abstract class InstanceKeyDataSource
      * Sets the default value for
      * {@link GenericKeyedObjectPoolConfig#getMaxIdlePerKey()} for each per user
      * pool.
+     * @param maxIdle The new value
      */
-    public void setDefaultMaxIdle(int maxIdle) {
+    public void setDefaultMaxIdle(final int maxIdle) {
         assertInitializationAllowed();
         this.defaultMaxIdle = maxIdle;
     }
 
-
     /**
-     * Gets the default value for
+     * @return the default value for
      * {@link GenericKeyedObjectPoolConfig#getMaxTotalPerKey()} for each per
      * user pool.
      */
@@ -303,15 +304,15 @@ public abstract class InstanceKeyDataSource
      * Sets the default value for
      * {@link GenericKeyedObjectPoolConfig#getMaxTotalPerKey()} for each per
      * user pool.
+     * @param maxTotal The new value
      */
-    public void setDefaultMaxTotal(int maxTotal) {
+    public void setDefaultMaxTotal(final int maxTotal) {
         assertInitializationAllowed();
         this.defaultMaxTotal = maxTotal;
     }
 
-
     /**
-     * Gets the default value for
+     * @return the default value for
      * {@link GenericKeyedObjectPoolConfig#getMaxWaitMillis()} for each per user
      * pool.
      */
@@ -323,15 +324,15 @@ public abstract class InstanceKeyDataSource
      * Sets the default value for
      * {@link GenericKeyedObjectPoolConfig#getMaxWaitMillis()} for each per user
      * pool.
+     * @param maxWaitMillis The new value
      */
-    public void setDefaultMaxWaitMillis(long maxWaitMillis) {
+    public void setDefaultMaxWaitMillis(final long maxWaitMillis) {
         assertInitializationAllowed();
         this.defaultMaxWaitMillis = maxWaitMillis;
     }
 
-
     /**
-     * Gets the default value for
+     * @return the default value for
      * {@link GenericKeyedObjectPoolConfig#getMinEvictableIdleTimeMillis()} for
      * each per user pool.
      */
@@ -343,16 +344,16 @@ public abstract class InstanceKeyDataSource
      * Sets the default value for
      * {@link GenericKeyedObjectPoolConfig#getMinEvictableIdleTimeMillis()} for
      * each per user pool.
+     * @param minEvictableIdleTimeMillis The new value
      */
     public void setDefaultMinEvictableIdleTimeMillis(
-            long minEvictableIdleTimeMillis) {
+            final long minEvictableIdleTimeMillis) {
         assertInitializationAllowed();
         this.defaultMinEvictableIdleTimeMillis = minEvictableIdleTimeMillis;
     }
 
-
     /**
-     * Gets the default value for
+     * @return the default value for
      * {@link GenericKeyedObjectPoolConfig#getMinIdlePerKey()} for each per user
      * pool.
      */
@@ -364,15 +365,15 @@ public abstract class InstanceKeyDataSource
      * Sets the default value for
      * {@link GenericKeyedObjectPoolConfig#getMinIdlePerKey()} for each per user
      * pool.
+     * @param minIdle The new value
      */
-    public void setDefaultMinIdle(int minIdle) {
+    public void setDefaultMinIdle(final int minIdle) {
         assertInitializationAllowed();
         this.defaultMinIdle = minIdle;
     }
 
-
     /**
-     * Gets the default value for
+     * @return the default value for
      * {@link GenericKeyedObjectPoolConfig#getNumTestsPerEvictionRun()} for each
      * per user pool.
      */
@@ -384,15 +385,15 @@ public abstract class InstanceKeyDataSource
      * Sets the default value for
      * {@link GenericKeyedObjectPoolConfig#getNumTestsPerEvictionRun()} for each
      * per user pool.
+     * @param numTestsPerEvictionRun The new value
      */
-    public void setDefaultNumTestsPerEvictionRun(int numTestsPerEvictionRun) {
+    public void setDefaultNumTestsPerEvictionRun(final int numTestsPerEvictionRun) {
         assertInitializationAllowed();
         this.defaultNumTestsPerEvictionRun = numTestsPerEvictionRun;
     }
 
-
     /**
-     * Gets the default value for
+     * @return the default value for
      * {@link org.apache.tomcat.dbcp.pool2.impl.GenericObjectPool GenericObjectPool#getSoftMinEvictableIdleTimeMillis()} for each
      * per user pool.
      */
@@ -403,16 +404,16 @@ public abstract class InstanceKeyDataSource
     /**
      * Sets the default value for
      * {@link org.apache.tomcat.dbcp.pool2.impl.GenericObjectPool GenericObjectPool#getSoftMinEvictableIdleTimeMillis()} for each per user pool.
+     * @param softMinEvictableIdleTimeMillis The new value
      */
     public void setDefaultSoftMinEvictableIdleTimeMillis(
-            long softMinEvictableIdleTimeMillis) {
+            final long softMinEvictableIdleTimeMillis) {
         assertInitializationAllowed();
         this.defaultSoftMinEvictableIdleTimeMillis = softMinEvictableIdleTimeMillis;
     }
 
-
     /**
-     * Gets the default value for
+     * @return the default value for
      * {@link org.apache.tomcat.dbcp.pool2.impl.GenericObjectPool GenericObjectPool#getTestOnCreate()} for each per user pool.
      */
     public boolean getDefaultTestOnCreate() {
@@ -422,15 +423,15 @@ public abstract class InstanceKeyDataSource
     /**
      * Sets the default value for
      * {@link org.apache.tomcat.dbcp.pool2.impl.GenericObjectPool GenericObjectPool#getTestOnCreate()} for each per user pool.
+     * @param testOnCreate The new value
      */
-    public void setDefaultTestOnCreate(boolean testOnCreate) {
+    public void setDefaultTestOnCreate(final boolean testOnCreate) {
         assertInitializationAllowed();
         this.defaultTestOnCreate = testOnCreate;
     }
 
-
     /**
-     * Gets the default value for
+     * @return the default value for
      * {@link org.apache.tomcat.dbcp.pool2.impl.GenericObjectPool GenericObjectPool#getTestOnBorrow()} for each per user pool.
      */
     public boolean getDefaultTestOnBorrow() {
@@ -440,15 +441,15 @@ public abstract class InstanceKeyDataSource
     /**
      * Sets the default value for
      * {@link org.apache.tomcat.dbcp.pool2.impl.GenericObjectPool GenericObjectPool#getTestOnBorrow()} for each per user pool.
+     * @param testOnBorrow The new value
      */
-    public void setDefaultTestOnBorrow(boolean testOnBorrow) {
+    public void setDefaultTestOnBorrow(final boolean testOnBorrow) {
         assertInitializationAllowed();
         this.defaultTestOnBorrow = testOnBorrow;
     }
 
-
     /**
-     * Gets the default value for
+     * @return the default value for
      * {@link org.apache.tomcat.dbcp.pool2.impl.GenericObjectPool GenericObjectPool#getTestOnReturn()} for each per user pool.
      */
     public boolean getDefaultTestOnReturn() {
@@ -458,15 +459,15 @@ public abstract class InstanceKeyDataSource
     /**
      * Sets the default value for
      * {@link org.apache.tomcat.dbcp.pool2.impl.GenericObjectPool GenericObjectPool#getTestOnReturn()} for each per user pool.
+     * @param testOnReturn The new value
      */
-    public void setDefaultTestOnReturn(boolean testOnReturn) {
+    public void setDefaultTestOnReturn(final boolean testOnReturn) {
         assertInitializationAllowed();
         this.defaultTestOnReturn = testOnReturn;
     }
 
-
     /**
-     * Gets the default value for
+     * @return the default value for
      * {@link org.apache.tomcat.dbcp.pool2.impl.GenericObjectPool GenericObjectPool#getTestWhileIdle()} for each per user pool.
      */
     public boolean getDefaultTestWhileIdle() {
@@ -476,15 +477,15 @@ public abstract class InstanceKeyDataSource
     /**
      * Sets the default value for
      * {@link org.apache.tomcat.dbcp.pool2.impl.GenericObjectPool GenericObjectPool#getTestWhileIdle()} for each per user pool.
+     * @param testWhileIdle The new value
      */
-    public void setDefaultTestWhileIdle(boolean testWhileIdle) {
+    public void setDefaultTestWhileIdle(final boolean testWhileIdle) {
         assertInitializationAllowed();
         this.defaultTestWhileIdle = testWhileIdle;
     }
 
-
     /**
-     * Gets the default value for
+     * @return the default value for
      * {@link org.apache.tomcat.dbcp.pool2.impl.GenericObjectPool GenericObjectPool#getTimeBetweenEvictionRunsMillis ()} for each
      * per user pool.
      */
@@ -496,28 +497,13 @@ public abstract class InstanceKeyDataSource
      * Sets the default value for
      * {@link org.apache.tomcat.dbcp.pool2.impl.GenericObjectPool GenericObjectPool#getTimeBetweenEvictionRunsMillis ()} for each
      * per user pool.
+     * @param timeBetweenEvictionRunsMillis The new value
      */
     public void setDefaultTimeBetweenEvictionRunsMillis (
-            long timeBetweenEvictionRunsMillis ) {
+            final long timeBetweenEvictionRunsMillis ) {
         assertInitializationAllowed();
         this.defaultTimeBetweenEvictionRunsMillis = timeBetweenEvictionRunsMillis ;
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     /**
      * Get the value of connectionPoolDataSource.  This method will return
@@ -535,7 +521,7 @@ public abstract class InstanceKeyDataSource
      *
      * @param v  Value to assign to connectionPoolDataSource.
      */
-    public void setConnectionPoolDataSource(ConnectionPoolDataSource v) {
+    public void setConnectionPoolDataSource(final ConnectionPoolDataSource v) {
         assertInitializationAllowed();
         if (dataSourceName != null) {
             throw new IllegalStateException(
@@ -568,7 +554,7 @@ public abstract class InstanceKeyDataSource
      *
      * @param v  Value to assign to dataSourceName.
      */
-    public void setDataSourceName(String v) {
+    public void setDataSourceName(final String v) {
         assertInitializationAllowed();
         if (dataSource != null) {
             throw new IllegalStateException(
@@ -607,7 +593,7 @@ public abstract class InstanceKeyDataSource
      *
      * @param v  Value to assign to defaultAutoCommit.
      */
-    public void setDefaultAutoCommit(Boolean v) {
+    public void setDefaultAutoCommit(final Boolean v) {
         assertInitializationAllowed();
         this.defaultAutoCommit = v;
     }
@@ -634,7 +620,7 @@ public abstract class InstanceKeyDataSource
      *
      * @param v  Value to assign to defaultReadOnly.
      */
-    public void setDefaultReadOnly(Boolean v) {
+    public void setDefaultReadOnly(final Boolean v) {
         assertInitializationAllowed();
         this.defaultReadOnly = v;
     }
@@ -659,7 +645,7 @@ public abstract class InstanceKeyDataSource
      *
      * @param v  Value to assign to defaultTransactionIsolation
      */
-    public void setDefaultTransactionIsolation(int v) {
+    public void setDefaultTransactionIsolation(final int v) {
         assertInitializationAllowed();
         switch (v) {
         case Connection.TRANSACTION_NONE:
@@ -675,7 +661,7 @@ public abstract class InstanceKeyDataSource
     }
 
     /**
-     * Get the description.  This property is defined by jdbc as for use with
+     * Get the description.  This property is defined by JDBC as for use with
      * GUI (or other) tools that might deploy the datasource.  It serves no
      * internal purpose.
      *
@@ -686,13 +672,13 @@ public abstract class InstanceKeyDataSource
     }
 
     /**
-     * Set the description.  This property is defined by jdbc as for use with
+     * Set the description.  This property is defined by JDBC as for use with
      * GUI (or other) tools that might deploy the datasource.  It serves no
      * internal purpose.
      *
      * @param v  Value to assign to description.
      */
-    public void setDescription(String v) {
+    public void setDescription(final String v) {
         this.description = v;
     }
 
@@ -704,10 +690,10 @@ public abstract class InstanceKeyDataSource
      * Get the value of jndiEnvironment which is used when instantiating
      * a jndi InitialContext.  This InitialContext is used to locate the
      * backend ConnectionPoolDataSource.
-     *
+     * @param key The environment property name
      * @return value of jndiEnvironment.
      */
-    public String getJndiEnvironment(String key) {
+    public String getJndiEnvironment(final String key) {
         String value = null;
         if (jndiEnvironment != null) {
             value = jndiEnvironment.getProperty(key);
@@ -723,7 +709,7 @@ public abstract class InstanceKeyDataSource
      * @param key the JNDI environment property to set.
      * @param value the value assigned to specified JNDI environment property.
      */
-    public void setJndiEnvironment(String key, String value) {
+    public void setJndiEnvironment(final String key, final String value) {
         if (jndiEnvironment == null) {
             jndiEnvironment = new Properties();
         }
@@ -738,7 +724,7 @@ public abstract class InstanceKeyDataSource
      * @param properties the JNDI environment property to set which will
      *                   overwrite any current settings
      */
-    void setJndiEnvironment(Properties properties) {
+    void setJndiEnvironment(final Properties properties) {
         if (jndiEnvironment == null) {
             jndiEnvironment = new Properties();
         } else {
@@ -761,7 +747,7 @@ public abstract class InstanceKeyDataSource
      * @param v  Value to assign to loginTimeout.
      */
     @Override
-    public void setLoginTimeout(int v) {
+    public void setLoginTimeout(final int v) {
         this.loginTimeout = v;
     }
 
@@ -783,7 +769,7 @@ public abstract class InstanceKeyDataSource
      * @param v  Value to assign to logWriter.
      */
     @Override
-    public void setLogWriter(PrintWriter v) {
+    public void setLogWriter(final PrintWriter v) {
         this.logWriter = v;
     }
 
@@ -793,6 +779,7 @@ public abstract class InstanceKeyDataSource
      * <strong>MUST</strong> be an SQL SELECT statement that returns at least
      * one row. If not specified, {@link Connection#isValid(int)} will be used
      * to validate connections.
+     * @return the validation query
      */
     public String getValidationQuery() {
         return this.validationQuery;
@@ -804,14 +791,15 @@ public abstract class InstanceKeyDataSource
      * <strong>MUST</strong> be an SQL SELECT statement that returns at least
      * one row. If not specified, connections will be validated using
      * {@link Connection#isValid(int)}.
+     * @param validationQuery The validation query
      */
-    public void setValidationQuery(String validationQuery) {
+    public void setValidationQuery(final String validationQuery) {
         assertInitializationAllowed();
         this.validationQuery = validationQuery;
     }
 
     /**
-     * Returns the timeout in seconds before the validation query fails.
+     * @return the timeout in seconds before the validation query fails.
      */
     public int getValidationQueryTimeout() {
         return validationQueryTimeout;
@@ -822,7 +810,7 @@ public abstract class InstanceKeyDataSource
      *
      * @param validationQueryTimeout    The new timeout in seconds
      */
-    public void setValidationQueryTimeout(int validationQueryTimeout) {
+    public void setValidationQueryTimeout(final int validationQueryTimeout) {
         this.validationQueryTimeout = validationQueryTimeout;
     }
 
@@ -847,13 +835,13 @@ public abstract class InstanceKeyDataSource
      *
      * @param rollbackAfterValidation new property value
      */
-    public void setRollbackAfterValidation(boolean rollbackAfterValidation) {
+    public void setRollbackAfterValidation(final boolean rollbackAfterValidation) {
         assertInitializationAllowed();
         this.rollbackAfterValidation = rollbackAfterValidation;
     }
 
     /**
-     * Returns the maximum permitted lifetime of a connection in milliseconds. A
+     * @return the maximum permitted lifetime of a connection in milliseconds. A
      * value of zero or less indicates an infinite lifetime.
      */
     public long getMaxConnLifetimeMillis() {
@@ -868,8 +856,9 @@ public abstract class InstanceKeyDataSource
      * initialized.  The pool is initialized the first time one of the
      * following methods is invoked: <code>getConnection, setLogwriter,
      * setLoginTimeout, getLoginTimeout, getLogWriter.</code></p>
+     * @param maxConnLifetimeMillis The maximum connection lifetime
      */
-    public void setMaxConnLifetimeMillis(long maxConnLifetimeMillis) {
+    public void setMaxConnLifetimeMillis(final long maxConnLifetimeMillis) {
         this.maxConnLifetimeMillis = maxConnLifetimeMillis;
     }
 
@@ -881,6 +870,8 @@ public abstract class InstanceKeyDataSource
 
     /**
      * Attempt to establish a database connection.
+     * @return the connection
+     * @throws SQLException Connection failed
      */
     @Override
     public Connection getConnection() throws SQLException {
@@ -897,10 +888,13 @@ public abstract class InstanceKeyDataSource
      * means that the database password has been changed.  In this case, the <code>PooledConnectionAndInfo</code>
      * instance retrieved with the old password is destroyed and the <code>getPooledConnectionAndInfo</code> is
      * repeatedly invoked until a <code>PooledConnectionAndInfo</code> instance with the new password is returned.
-     *
+     * @param username The user name to use to connect
+     * @param password The password
+     * @return the connection
+     * @throws SQLException Connection failed
      */
     @Override
-    public Connection getConnection(String username, String password)
+    public Connection getConnection(final String username, final String password)
             throws SQLException {
         if (instanceKey == null) {
             throw new SQLException("Must set the ConnectionPoolDataSource "
@@ -911,16 +905,16 @@ public abstract class InstanceKeyDataSource
         PooledConnectionAndInfo info = null;
         try {
             info = getPooledConnectionAndInfo(username, password);
-        } catch (NoSuchElementException e) {
+        } catch (final NoSuchElementException e) {
             closeDueToException(info);
             throw new SQLException("Cannot borrow connection from pool", e);
-        } catch (RuntimeException e) {
+        } catch (final RuntimeException e) {
             closeDueToException(info);
             throw e;
-        } catch (SQLException e) {
+        } catch (final SQLException e) {
             closeDueToException(info);
             throw e;
-        } catch (Exception e) {
+        } catch (final Exception e) {
             closeDueToException(info);
             throw new SQLException("Cannot borrow connection from pool", e);
         }
@@ -929,18 +923,18 @@ public abstract class InstanceKeyDataSource
                 : password.equals(info.getPassword()))) {  // Password on PooledConnectionAndInfo does not match
             try { // See if password has changed by attempting connection
                 testCPDS(username, password);
-            } catch (SQLException ex) {
+            } catch (final SQLException ex) {
                 // Password has not changed, so refuse client, but return connection to the pool
                 closeDueToException(info);
                 throw new SQLException("Given password did not match password used"
                                        + " to create the PooledConnection.", ex);
-            } catch (javax.naming.NamingException ne) {
+            } catch (final javax.naming.NamingException ne) {
                 throw new SQLException(
                         "NamingException encountered connecting to database", ne);
             }
             /*
              * Password must have changed -> destroy connection and keep retrying until we get a new, good one,
-             * destroying any idle connections with the old passowrd as we pull them from the pool.
+             * destroying any idle connections with the old password as we pull them from the pool.
              */
             final UserPassKey upkey = info.getUserPassKey();
             final PooledConnectionManager manager = getConnectionManager(upkey);
@@ -950,16 +944,16 @@ public abstract class InstanceKeyDataSource
             for (int i = 0; i < 10; i++) { // Bound the number of retries - only needed if bad instances return
                 try {
                     info = getPooledConnectionAndInfo(username, password);
-                } catch (NoSuchElementException e) {
+                } catch (final NoSuchElementException e) {
                     closeDueToException(info);
                     throw new SQLException("Cannot borrow connection from pool", e);
-                } catch (RuntimeException e) {
+                } catch (final RuntimeException e) {
                     closeDueToException(info);
                     throw e;
-                } catch (SQLException e) {
+                } catch (final SQLException e) {
                     closeDueToException(info);
                     throw e;
-                } catch (Exception e) {
+                } catch (final Exception e) {
                     closeDueToException(info);
                     throw new SQLException("Cannot borrow connection from pool", e);
                 }
@@ -976,15 +970,15 @@ public abstract class InstanceKeyDataSource
             }
         }
 
-        Connection con = info.getPooledConnection().getConnection();
+        final Connection con = info.getPooledConnection().getConnection();
         try {
             setupDefaults(con, username);
             con.clearWarnings();
             return con;
-        } catch (SQLException ex) {
+        } catch (final SQLException ex) {
             try {
                 con.close();
-            } catch (Exception exc) {
+            } catch (final Exception exc) {
                 getLogWriter().println(
                      "ignoring exception during close: " + exc);
             }
@@ -1000,11 +994,11 @@ public abstract class InstanceKeyDataSource
         throws SQLException;
 
 
-    private void closeDueToException(PooledConnectionAndInfo info) {
+    private void closeDueToException(final PooledConnectionAndInfo info) {
         if (info != null) {
             try {
                 info.getPooledConnection().getConnection().close();
-            } catch (Exception e) {
+            } catch (final Exception e) {
                 // do not throw this exception because we are in the middle
                 // of handling another exception.  But record it because
                 // it potentially leaks connections from the pool.
@@ -1015,7 +1009,7 @@ public abstract class InstanceKeyDataSource
     }
 
     protected ConnectionPoolDataSource
-        testCPDS(String username, String password)
+        testCPDS(final String username, final String password)
         throws javax.naming.NamingException, SQLException {
         // The source of physical db connections
         ConnectionPoolDataSource cpds = this.dataSource;
@@ -1026,7 +1020,7 @@ public abstract class InstanceKeyDataSource
             } else {
                 ctx = new InitialContext(jndiEnvironment);
             }
-            Object ds = ctx.lookup(dataSourceName);
+            final Object ds = ctx.lookup(dataSourceName);
             if (ds instanceof ConnectionPoolDataSource) {
                 cpds = (ConnectionPoolDataSource) ds;
             } else {
@@ -1056,7 +1050,7 @@ public abstract class InstanceKeyDataSource
                 try {
                     conn.close();
                 }
-                catch (SQLException e) {
+                catch (final SQLException e) {
                     // at least we could connect
                 }
             }

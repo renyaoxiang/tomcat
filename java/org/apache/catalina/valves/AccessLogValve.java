@@ -160,10 +160,10 @@ public class AccessLogValve extends AbstractAccessLogValve {
 
 
     /**
-     * Return the directory in which we create log files.
+     * @return the directory in which we create log files.
      */
     public String getDirectory() {
-        return (directory);
+        return directory;
     }
 
 
@@ -178,6 +178,7 @@ public class AccessLogValve extends AbstractAccessLogValve {
 
     /**
      * Check for file existence before logging.
+     * @return <code>true</code> if file existence is checked first
      */
     public boolean isCheckExists() {
 
@@ -199,10 +200,10 @@ public class AccessLogValve extends AbstractAccessLogValve {
 
 
     /**
-     * Return the log file prefix.
+     * @return the log file prefix.
      */
     public String getPrefix() {
-        return (prefix);
+        return prefix;
     }
 
 
@@ -217,7 +218,9 @@ public class AccessLogValve extends AbstractAccessLogValve {
 
 
     /**
-     * Should we rotate the logs
+     * Should we rotate the access log.
+     *
+     * @return <code>true</code> if the access log should be rotated
      */
     public boolean isRotatable() {
         return rotatable;
@@ -225,9 +228,9 @@ public class AccessLogValve extends AbstractAccessLogValve {
 
 
     /**
-     * Set the value is we should we rotate the logs
+     * Configure whether the access log should be rotated.
      *
-     * @param rotatable true is we should rotate.
+     * @param rotatable true if the log should be rotated
      */
     public void setRotatable(boolean rotatable) {
         this.rotatable = rotatable;
@@ -236,7 +239,9 @@ public class AccessLogValve extends AbstractAccessLogValve {
 
     /**
      * Should we defer inclusion of the date stamp in the file
-     * name until rotate time
+     * name until rotate time.
+     * @return <code>true</code> if the logs file names are time stamped
+     *  only when they are rotated
      */
     public boolean isRenameOnRotate() {
         return renameOnRotate;
@@ -255,7 +260,8 @@ public class AccessLogValve extends AbstractAccessLogValve {
 
 
     /**
-     * Is the logging buffered
+     * Is the logging buffered. Usually buffering can increase performance.
+     * @return <code>true</code> if the logging uses a buffer
      */
     public boolean isBuffered() {
         return buffered;
@@ -265,7 +271,7 @@ public class AccessLogValve extends AbstractAccessLogValve {
     /**
      * Set the value if the logging should be buffered
      *
-     * @param buffered true if buffered.
+     * @param buffered <code>true</code> if buffered.
      */
     public void setBuffered(boolean buffered) {
         this.buffered = buffered;
@@ -273,10 +279,10 @@ public class AccessLogValve extends AbstractAccessLogValve {
 
 
     /**
-     * Return the log file suffix.
+     * @return the log file suffix.
      */
     public String getSuffix() {
-        return (suffix);
+        return suffix;
     }
 
 
@@ -290,7 +296,7 @@ public class AccessLogValve extends AbstractAccessLogValve {
     }
 
     /**
-     *  Return the date format date based log rotation.
+     * @return the date format date based log rotation.
      */
     public String getFileDateFormat() {
         return fileDateFormat;
@@ -298,7 +304,8 @@ public class AccessLogValve extends AbstractAccessLogValve {
 
 
     /**
-     *  Set the date format date based log rotation.
+     * Set the date format date based log rotation.
+     * @param fileDateFormat The format for the file timestamp
      */
     public void setFileDateFormat(String fileDateFormat) {
         String newFormat;
@@ -385,7 +392,6 @@ public class AccessLogValve extends AbstractAccessLogValve {
      * Rename the existing log file to something else. Then open the
      * old log file name up once again. Intended to be called by a JMX
      * agent.
-     *
      *
      * @param newFileName The file name to move the log file entry to
      * @return true if a file was rotated with no error

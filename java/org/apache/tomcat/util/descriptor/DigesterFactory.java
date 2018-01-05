@@ -120,6 +120,12 @@ public class DigesterFactory {
         addSelf(systemIds, "javaee_web_services_1_4.xsd");
         addSelf(systemIds, "javaee_web_services_client_1_4.xsd");
 
+        // from JavaEE 8
+        add(systemIds, XmlIdentifiers.WEB_40_XSD, locationFor("web-app_4_0.xsd"));
+        add(systemIds, XmlIdentifiers.WEB_FRAGMENT_40_XSD, locationFor("web-fragment_4_0.xsd"));
+        addSelf(systemIds, "web-common_4_0.xsd");
+        addSelf(systemIds, "javaee_8.xsd");
+
         SERVLET_API_PUBLIC_IDS = Collections.unmodifiableMap(publicIds);
         SERVLET_API_SYSTEM_IDS = Collections.unmodifiableMap(systemIds);
     }
@@ -157,6 +163,7 @@ public class DigesterFactory {
      * @param xmlNamespaceAware turn on/off namespace validation
      * @param rule an instance of <code>RuleSet</code> used for parsing the xml.
      * @param blockExternal turn on/off the blocking of external resources
+     * @return a new digester
      */
     public static Digester newDigester(boolean xmlValidation,
                                        boolean xmlNamespaceAware,

@@ -21,7 +21,7 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URL;
 import java.net.URLConnection;
-import java.net.URLDecoder;
+import java.nio.charset.Charset;
 import java.util.Collection;
 import java.util.Date;
 import java.util.Enumeration;
@@ -33,9 +33,11 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.apache.catalina.connector.Connector;
 import org.apache.catalina.connector.Request;
 import org.apache.coyote.Constants;
 import org.apache.tomcat.util.buf.B2CConverter;
+import org.apache.tomcat.util.buf.UDecoder;
 import org.apache.tomcat.util.http.RequestUtil;
 
 /**
@@ -170,9 +172,9 @@ public class SSIServletExternalResolver implements SSIExternalResolver {
             }
         } else if(nameParts[0].equals("CONTENT")) {
             if (nameParts[1].equals("LENGTH")) {
-                int contentLength = req.getContentLength();
+                long contentLength = req.getContentLengthLong();
                 if (contentLength >= 0) {
-                    retVal = Integer.toString(contentLength);
+                    retVal = Long.toString(contentLength);
                 }
             } else if (nameParts[1].equals("TYPE")) {
                 retVal = req.getContentType();
@@ -243,38 +245,36 @@ public class SSIServletExternalResolver implements SSIExternalResolver {
                 } else if (nameParts[2].equals("UNESCAPED")) {
                     requiredParts = 3;
                     if (queryString != null) {
-                        // Use default as a last resort
-                        String queryStringEncoding =
-                            Constants.DEFAULT_CHARACTER_ENCODING;
-
-                        String uriEncoding = null;
+                        Charset uriCharset = null;
+                        Charset requestCharset = null;
                         boolean useBodyEncodingForURI = false;
 
                         // Get encoding settings from request / connector if
                         // possible
-                        String requestEncoding = req.getCharacterEncoding();
                         if (req instanceof Request) {
-                            uriEncoding =
-                                ((Request)req).getConnector().getURIEncoding();
-                            useBodyEncodingForURI = ((Request)req)
-                                    .getConnector().getUseBodyEncodingForURI();
+                            try {
+                                requestCharset = ((Request)req).getCoyoteRequest().getCharset();
+                            } catch (UnsupportedEncodingException e) {
+                                // Ignore
+                            }
+                            Connector connector =  ((Request)req).getConnector();
+                            uriCharset = connector.getURICharset();
+                            useBodyEncodingForURI = connector.getUseBodyEncodingForURI();
                         }
+
+                        Charset queryStringCharset;
 
                         // If valid, apply settings from request / connector
-                        if (uriEncoding != null) {
-                            queryStringEncoding = uriEncoding;
-                        } else if(useBodyEncodingForURI) {
-                            if (requestEncoding != null) {
-                                queryStringEncoding = requestEncoding;
-                            }
+                        if (useBodyEncodingForURI && requestCharset != null) {
+                            queryStringCharset = requestCharset;
+                        } else if (uriCharset != null) {
+                            queryStringCharset = uriCharset;
+                        } else {
+                            // Use default as a last resort
+                            queryStringCharset = Constants.DEFAULT_URI_CHARSET;
                         }
 
-                        try {
-                            retVal = URLDecoder.decode(queryString,
-                                    queryStringEncoding);
-                        } catch (UnsupportedEncodingException e) {
-                            retVal = queryString;
-                        }
+                        retVal = UDecoder.URLDecode(queryString, queryStringCharset);
                     }
                 }
             }
@@ -393,7 +393,7 @@ public class SSIServletExternalResolver implements SSIExternalResolver {
             throw new IOException("A non-virtual path can't be absolute: "
                     + nonVirtualPath);
         }
-        if (nonVirtualPath.indexOf("../") >= 0) {
+        if (nonVirtualPath.contains("../")) {
             throw new IOException("A non-virtual path can't contain '../' : "
                     + nonVirtualPath);
         }
@@ -504,7 +504,7 @@ public class SSIServletExternalResolver implements SSIExternalResolver {
         long fileSize = -1;
         try {
             URLConnection urlConnection = getURLConnection(path, virtual);
-            fileSize = urlConnection.getContentLength();
+            fileSize = urlConnection.getContentLengthLong();
         } catch (IOException e) {
             // Ignore this. It will always fail for non-file based includes
         }
@@ -550,8 +550,7 @@ public class SSIServletExternalResolver implements SSIExternalResolver {
             // a problem
             // if a truly empty file
             //were included, but not sure how else to tell.
-            if (retVal.equals("") && !req.getMethod().equalsIgnoreCase(
-                    org.apache.coyote.http11.Constants.HEAD)) {
+            if (retVal.equals("") && !req.getMethod().equalsIgnoreCase("HEAD")) {
                 throw new IOException("Couldn't find file: " + path);
             }
             return retVal;

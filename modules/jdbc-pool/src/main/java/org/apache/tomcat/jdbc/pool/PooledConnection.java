@@ -136,7 +136,10 @@ public class PooledConnection {
 
     /**
      * @deprecated use {@link #shouldForceReconnect(String, String)}
-     * method kept since it was public, to avoid changing interface. name was pooo
+     * method kept since it was public, to avoid changing interface.
+     * @param username The user name
+     * @param password The password
+     * @return <code>true</code>if the pool does not need to reconnect
      */
     @Deprecated
     public boolean checkUser(String username, String password) {
@@ -270,7 +273,7 @@ public class PooledConnection {
                             poolProperties.getDriverClassName(),
                             PooledConnection.class.getClassLoader(),
                             Thread.currentThread().getContextClassLoader()
-                        ).newInstance();
+                        ).getConstructor().newInstance();
                 }
             }
         } catch (java.lang.Exception cn) {
@@ -400,14 +403,14 @@ public class PooledConnection {
         if (poolProperties.getRemoveAbandonedTimeout() <= 0) {
             return Long.MAX_VALUE;
         } else {
-            return poolProperties.getRemoveAbandonedTimeout()*1000;
+            return poolProperties.getRemoveAbandonedTimeout() * 1000L;
         } //end if
     }
 
     /**
-     * Returns true if the connection pool is configured
+     * Returns <code>true</code> if the connection pool is configured
      * to do validation for a certain action.
-     * @param action
+     * @param action The validation action
      */
     private boolean doValidate(int action) {
         if (action == PooledConnection.VALIDATE_BORROW &&
@@ -429,9 +432,12 @@ public class PooledConnection {
             return false;
     }
 
-    /**Returns true if the object is still valid. if not
+    /**
+     * Returns <code>true</code> if the object is still valid. if not
      * the pool will call the getExpiredAction() and follow up with one
      * of the four expired methods
+     * @param validateAction The value
+     * @return <code>true</code> if the connection is valid
      */
     public boolean validate(int validateAction) {
         return validate(validateAction,null);
@@ -491,6 +497,29 @@ public class PooledConnection {
             query = poolProperties.getValidationQuery();
         }
 
+        if (query == null) {
+            int validationQueryTimeout = poolProperties.getValidationQueryTimeout();
+            if (validationQueryTimeout < 0) validationQueryTimeout = 0;
+            try {
+                if (connection.isValid(validationQueryTimeout)) {
+                    this.lastValidated = now;
+                    return true;
+                } else {
+                    if (getPoolProperties().getLogValidationErrors()) {
+                        log.error("isValid() returned false.");
+                    }
+                    return false;
+                }
+            } catch (SQLException e) {
+                if (getPoolProperties().getLogValidationErrors()) {
+                    log.error("isValid() failed.", e);
+                } else if (log.isDebugEnabled()) {
+                    log.debug("isValid() failed.", e);
+                }
+                return false;
+            }
+        }
+
         Statement stmt = null;
         try {
             stmt = connection.createStatement();
@@ -512,6 +541,22 @@ public class PooledConnection {
             }
             if (stmt!=null)
                 try { stmt.close();} catch (Exception ignore2){/*NOOP*/}
+
+            try {
+                if(!connection.getAutoCommit()) {
+                    connection.rollback();
+                }
+            } catch (SQLException e) {
+                // do nothing
+            }
+        } finally {
+            try {
+                if(!connection.getAutoCommit()) {
+                    connection.commit();
+                }
+            } catch (SQLException e) {
+                // do nothing
+            }
         }
         return false;
     } //validate
@@ -604,7 +649,7 @@ public class PooledConnection {
     /**
      * Sets the pool configuration for this connection and connection pool.
      * Object is shared with the {@link ConnectionPool}
-     * @param poolProperties
+     * @param poolProperties The pool properties
      */
     public void setPoolProperties(PoolConfiguration poolProperties) {
         this.poolProperties = poolProperties;

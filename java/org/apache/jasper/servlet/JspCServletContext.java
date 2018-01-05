@@ -48,7 +48,7 @@ import javax.servlet.descriptor.JspConfigDescriptor;
 import org.apache.jasper.Constants;
 import org.apache.jasper.JasperException;
 import org.apache.jasper.compiler.Localizer;
-import org.apache.jasper.util.ExceptionUtils;
+import org.apache.jasper.runtime.ExceptionUtils;
 import org.apache.tomcat.JarScanType;
 import org.apache.tomcat.util.descriptor.web.FragmentJarScannerCallback;
 import org.apache.tomcat.util.descriptor.web.WebXml;
@@ -79,7 +79,7 @@ public class JspCServletContext implements ServletContext {
     /**
      * Servlet context initialization parameters.
      */
-    private final ConcurrentHashMap<String,String> myParameters;
+    private final Map<String,String> myParameters = new ConcurrentHashMap<>();
 
 
     /**
@@ -119,14 +119,13 @@ public class JspCServletContext implements ServletContext {
      * @param validate      Should a validating parser be used to parse web.xml?
      * @param blockExternal Should external entities be blocked when parsing
      *                      web.xml?
-     * @throws JasperException
+     * @throws JasperException An error occurred building the merged web.xml
      */
     public JspCServletContext(PrintWriter aLogWriter, URL aResourceBaseURL,
             ClassLoader classLoader, boolean validate, boolean blockExternal)
             throws JasperException {
 
         myAttributes = new HashMap<>();
-        myParameters = new ConcurrentHashMap<>();
         myParameters.put(Constants.XML_BLOCK_EXTERNAL_INIT_PARAM,
                 String.valueOf(blockExternal));
         myLogWriter = aLogWriter;
@@ -249,7 +248,7 @@ public class JspCServletContext implements ServletContext {
      */
     @Override
     public Enumeration<String> getInitParameterNames() {
-        return myParameters.keys();
+        return Collections.enumeration(myParameters.keySet());
     }
 
 
@@ -359,14 +358,12 @@ public class JspCServletContext implements ServletContext {
      */
     @Override
     public InputStream getResourceAsStream(String path) {
-
         try {
-            return (getResource(path).openStream());
+            return getResource(path).openStream();
         } catch (Throwable t) {
             ExceptionUtils.handleThrowable(t);
-            return (null);
+            return null;
         }
-
     }
 
 
@@ -384,11 +381,14 @@ public class JspCServletContext implements ServletContext {
             path += "/";
         String basePath = getRealPath(path);
         if (basePath == null)
-            return (thePaths);
+            return thePaths;
         File theBaseDir = new File(basePath);
         if (!theBaseDir.exists() || !theBaseDir.isDirectory())
-            return (thePaths);
+            return thePaths;
         String theFiles[] = theBaseDir.list();
+        if (theFiles == null) {
+            return thePaths;
+        }
         for (int i = 0; i < theFiles.length; i++) {
             File testFile = new File(basePath + File.separator + theFiles[i]);
             if (testFile.isFile())
@@ -396,7 +396,7 @@ public class JspCServletContext implements ServletContext {
             else if (testFile.isDirectory())
                 thePaths.add(path + theFiles[i] + "/");
         }
-        return (thePaths);
+        return thePaths;
 
     }
 
@@ -406,7 +406,7 @@ public class JspCServletContext implements ServletContext {
      */
     @Override
     public String getServerInfo() {
-        return ("JspC/ApacheTomcat8");
+        return "JspC/ApacheTomcat8";
     }
 
 
@@ -429,7 +429,7 @@ public class JspCServletContext implements ServletContext {
      */
     @Override
     public String getServletContextName() {
-        return (getServerInfo());
+        return getServerInfo();
     }
 
 
@@ -441,7 +441,7 @@ public class JspCServletContext implements ServletContext {
     @Override
     @Deprecated
     public Enumeration<String> getServletNames() {
-        return (new Vector<String>().elements());
+        return new Vector<String>().elements();
     }
 
 
@@ -453,7 +453,7 @@ public class JspCServletContext implements ServletContext {
     @Override
     @Deprecated
     public Enumeration<Servlet> getServlets() {
-        return (new Vector<Servlet>().elements());
+        return new Vector<Servlet>().elements();
     }
 
 
@@ -586,6 +586,12 @@ public class JspCServletContext implements ServletContext {
 
 
     @Override
+    public javax.servlet.ServletRegistration.Dynamic addJspFile(String jspName, String jspFile) {
+        return null;
+    }
+
+
+    @Override
     public <T extends Filter> T createFilter(Class<T> c)
             throws ServletException {
         return null;
@@ -687,5 +693,35 @@ public class JspCServletContext implements ServletContext {
     @Override
     public String getVirtualServerName() {
         return null;
+    }
+
+    @Override
+    public int getSessionTimeout() {
+        return 0;
+    }
+
+    @Override
+    public void setSessionTimeout(int sessionTimeout) {
+        // NO-OP
+    }
+
+    @Override
+    public String getRequestCharacterEncoding() {
+        return null;
+    }
+
+    @Override
+    public void setRequestCharacterEncoding(String encoding) {
+        // NO-OP
+    }
+
+    @Override
+    public String getResponseCharacterEncoding() {
+        return null;
+    }
+
+    @Override
+    public void setResponseCharacterEncoding(String encoding) {
+        // NO-OP
     }
 }

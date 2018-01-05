@@ -16,17 +16,10 @@
  */
 package org.apache.coyote.http11;
 
-import java.nio.channels.SocketChannel;
-import java.util.Iterator;
-
-import org.apache.coyote.Processor;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
 import org.apache.tomcat.util.net.NioChannel;
 import org.apache.tomcat.util.net.NioEndpoint;
-import org.apache.tomcat.util.net.NioEndpoint.Handler;
-import org.apache.tomcat.util.net.SocketStatus;
-import org.apache.tomcat.util.net.SocketWrapperBase;
 
 
 /**
@@ -44,23 +37,11 @@ public class Http11NioProtocol extends AbstractHttp11JsseProtocol<NioChannel> {
 
     public Http11NioProtocol() {
         super(new NioEndpoint());
-        Http11ConnectionHandler cHandler = new Http11ConnectionHandler(this);
-        setHandler(cHandler);
-        ((NioEndpoint) getEndpoint()).setHandler(cHandler);
     }
 
 
     @Override
     protected Log getLog() { return log; }
-
-
-    @Override
-    public void start() throws Exception {
-        super.start();
-        if (npnHandler != null) {
-            npnHandler.init(getEndpoint(), 0, getAdapter());
-        }
-    }
 
 
     // -------------------- Pool setup --------------------
@@ -81,129 +62,23 @@ public class Http11NioProtocol extends AbstractHttp11JsseProtocol<NioChannel> {
         return ((NioEndpoint)getEndpoint()).getSelectorTimeout();
     }
 
-    public void setAcceptorThreadPriority(int threadPriority) {
-        ((NioEndpoint)getEndpoint()).setAcceptorThreadPriority(threadPriority);
-    }
-
     public void setPollerThreadPriority(int threadPriority) {
         ((NioEndpoint)getEndpoint()).setPollerThreadPriority(threadPriority);
     }
 
-    public int getAcceptorThreadPriority() {
-      return ((NioEndpoint)getEndpoint()).getAcceptorThreadPriority();
-    }
-
     public int getPollerThreadPriority() {
-      return ((NioEndpoint)getEndpoint()).getThreadPriority();
+      return ((NioEndpoint)getEndpoint()).getPollerThreadPriority();
     }
 
-
-    // -------------------- Tcp setup --------------------
-    public void setOomParachute(int oomParachute) {
-        ((NioEndpoint)getEndpoint()).setOomParachute(oomParachute);
-    }
 
     // ----------------------------------------------------- JMX related methods
 
     @Override
     protected String getNamePrefix() {
         if (isSSLEnabled()) {
-            return ("https-nio");
+            return "https-" + getSslImplementationShortName()+ "-nio";
         } else {
-            return ("http-nio");
-        }
-    }
-
-
-    // --------------------  Connection handler --------------------
-
-    protected static class Http11ConnectionHandler
-            extends AbstractHttp11ConnectionHandler<NioChannel>
-            implements Handler {
-
-        Http11ConnectionHandler(Http11NioProtocol proto) {
-            super(proto);
-        }
-
-        @Override
-        protected Log getLog() {
-            return log;
-        }
-
-
-        /**
-         * Expected to be used by the Poller to release resources on socket
-         * close, errors etc.
-         */
-        @Override
-        public void release(SocketChannel socket) {
-            if (log.isDebugEnabled())
-                log.debug("Iterating through our connections to release a socket channel:"+socket);
-            boolean released = false;
-            Iterator<java.util.Map.Entry<NioChannel, Processor>> it = connections.entrySet().iterator();
-            while (it.hasNext()) {
-                java.util.Map.Entry<NioChannel, Processor> entry = it.next();
-                if (entry.getKey().getIOChannel()==socket) {
-                    it.remove();
-                    Processor result = entry.getValue();
-                    result.recycle();
-                    unregister(result);
-                    released = true;
-                    break;
-                }
-            }
-            if (log.isDebugEnabled())
-                log.debug("Done iterating through our connections to release a socket channel:"+socket +" released:"+released);
-        }
-
-        /**
-         * Expected to be used by the Poller to release resources on socket
-         * close, errors etc.
-         */
-        @Override
-        public void release(SocketWrapperBase<NioChannel> socket) {
-            Processor processor = connections.remove(socket.getSocket());
-            if (processor != null) {
-                processor.recycle();
-                recycledProcessors.push(processor);
-            }
-        }
-
-        @Override
-        public SocketState process(SocketWrapperBase<NioChannel> socket,
-                SocketStatus status) {
-            if (getProtocol().npnHandler != null) {
-                SocketState ss = getProtocol().npnHandler.process(socket, status);
-                if (ss != SocketState.OPEN) {
-                    return ss;
-                }
-            }
-            return super.process(socket, status);
-        }
-
-
-        @Override
-        public void release(SocketWrapperBase<NioChannel> socket,
-                Processor processor, boolean addToPoller) {
-            processor.recycle();
-            recycledProcessors.push(processor);
-            if (addToPoller) {
-                socket.registerReadInterest();
-            }
-        }
-
-        @Override
-        protected void longPoll(SocketWrapperBase<NioChannel> socket, Processor processor) {
-
-            if (processor.isAsync()) {
-                socket.setAsync(true);
-            } else {
-                // Either:
-                //  - this is an upgraded connection
-                //  - the request line/headers have not been completely
-                //    read
-                socket.registerReadInterest();
-            }
+            return "http-nio";
         }
     }
 }

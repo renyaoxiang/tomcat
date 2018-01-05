@@ -86,7 +86,7 @@ public class StoreFileMover {
     }
 
     /**
-     * @param string
+     * @param string The file name
      */
     public void setFilename(String string) {
         filename = string;
@@ -100,7 +100,7 @@ public class StoreFileMover {
     }
 
     /**
-     * @param string
+     * @param string The encoding
      */
     public void setEncoding(String string) {
         encoding = string;
@@ -108,6 +108,9 @@ public class StoreFileMover {
 
     /**
      * Calculate file objects for the old and new configuration files.
+     * @param basename The base path
+     * @param encoding The encoding of the file
+     * @param filename The file name
      */
     public StoreFileMover(String basename, String filename, String encoding) {
         setBasename(basename);
@@ -124,7 +127,7 @@ public class StoreFileMover {
     }
 
     /**
-     * generate the Filename to new with TimeStamp
+     * Generate the Filename to new with TimeStamp.
      */
     public void init() {
         String configFile = getFilename();
@@ -137,7 +140,9 @@ public class StoreFileMover {
             configNew = new File(getBasename(), configFile + ".new");
         }
         if (!configNew.getParentFile().exists()) {
-            configNew.getParentFile().mkdirs();
+            if (!configNew.getParentFile().mkdirs()) {
+                throw new IllegalStateException("Cannot create directory " + configNew);
+            }
         }
         String sb = getTimeTag();
         configSave = new File(configFile + sb);
@@ -147,9 +152,9 @@ public class StoreFileMover {
     }
 
     /**
-     * Shuffle old-&gt;save and new-&gt;old
+     * Shuffle old-&gt;save and new-&gt;old.
      *
-     * @throws IOException
+     * @throws IOException a file operation error occurred
      */
     public void move() throws IOException {
         if (configOld.renameTo(configSave)) {
@@ -175,10 +180,10 @@ public class StoreFileMover {
     }
 
     /**
-     * Open an output writer for the new configuration file
+     * Open an output writer for the new configuration file.
      *
      * @return The writer
-     * @throws IOException
+     * @throws IOException Failed opening a writer to the new file
      */
     public PrintWriter getWriter() throws IOException {
         return new PrintWriter(new OutputStreamWriter(
@@ -186,7 +191,7 @@ public class StoreFileMover {
     }
 
     /**
-     * Time value for backup yyyy-mm-dd.hh-mm-ss
+     * Time value for backup yyyy-mm-dd.hh-mm-ss.
      *
      * @return The time
      */

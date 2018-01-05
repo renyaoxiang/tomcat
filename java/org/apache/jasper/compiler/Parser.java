@@ -19,7 +19,6 @@ package org.apache.jasper.compiler;
 import java.io.CharArrayWriter;
 import java.io.FileNotFoundException;
 import java.util.Collection;
-import java.util.Iterator;
 
 import javax.servlet.jsp.tagext.TagAttributeInfo;
 import javax.servlet.jsp.tagext.TagFileInfo;
@@ -29,8 +28,8 @@ import javax.servlet.jsp.tagext.TagLibraryInfo;
 import org.apache.jasper.JasperException;
 import org.apache.jasper.JspCompilationContext;
 import org.apache.jasper.util.UniqueAttributesImpl;
+import org.apache.tomcat.Jar;
 import org.apache.tomcat.util.descriptor.tld.TldResourcePath;
-import org.apache.tomcat.util.scan.Jar;
 import org.xml.sax.Attributes;
 import org.xml.sax.helpers.AttributesImpl;
 
@@ -80,10 +79,10 @@ class Parser implements TagConstants {
     /* System property that controls if the strict white space rules are
      * applied.
      */
-    private static final boolean STRICT_WHITESPACE = Boolean.valueOf(
+    private static final boolean STRICT_WHITESPACE = Boolean.parseBoolean(
             System.getProperty(
                     "org.apache.jasper.compiler.Parser.STRICT_WHITESPACE",
-                    "true")).booleanValue();
+                    "true"));
     /**
      * The constructor
      */
@@ -104,14 +103,20 @@ class Parser implements TagConstants {
     /**
      * The main entry for Parser
      *
-     * @param pc
-     *            The ParseController, use for getting other objects in compiler
+     * @param pc  The ParseController, use for getting other objects in compiler
      *            and for parsing included pages
-     * @param reader
-     *            To read the page
-     * @param parent
-     *            The parent node to this page, null for top level page
+     * @param reader To read the page
+     * @param parent The parent node to this page, null for top level page
+     * @param isTagFile Is the page being parsed a tag file?
+     * @param directivesOnly Should only directives be parsed?
+     * @param jar JAR, if any, that this page was loaded from
+     * @param pageEnc The encoding of the source
+     * @param jspConfigPageEnc The encoding for the page
+     * @param isDefaultPageEncoding Is the page encoding the default?
+     * @param isBomPresent Is a BOM present in the source
      * @return list of nodes representing the parsed page
+     *
+     * @throws JasperException If an error occurs during parsing
      */
     public static Node.Nodes parse(ParserController pc, JspReader reader,
             Node parent, boolean isTagFile, boolean directivesOnly,
@@ -177,6 +182,13 @@ class Parser implements TagConstants {
 
     /**
      * Parse Attributes for a reader, provided for external use
+     *
+     * @param pc The parser
+     * @param reader The source
+     *
+     * @return The parsed attributes
+     *
+     * @throws JasperException If an error occurs during parsing
      */
     public static Attributes parseAttributes(ParserController pc,
             JspReader reader) throws JasperException {
@@ -198,6 +210,8 @@ class Parser implements TagConstants {
         String qName = parseName();
         if (qName == null)
             return false;
+
+        boolean ignoreEL = pageInfo.isELIgnored();
 
         // Determine prefix and local name components
         String localName = qName;
@@ -223,11 +237,14 @@ class Parser implements TagConstants {
             err.jspError(reader.mark(), "jsp.error.attribute.noquote");
 
         String watchString = "";
-        if (reader.matches("<%="))
+        if (reader.matches("<%=")) {
             watchString = "%>";
+            // Can't embed EL in a script expression
+            ignoreEL = true;
+        }
         watchString = watchString + quote;
 
-        String attrValue = parseAttributeValue(watchString);
+        String attrValue = parseAttributeValue(qName, watchString, ignoreEL);
         attrs.addAttribute(uri, localName, qName, "CDATA", attrValue);
         return true;
     }
@@ -258,11 +275,14 @@ class Parser implements TagConstants {
      * RTAttributeValueDouble ::= ((QuotedChar - '"')* - ((QuotedChar-'"')'%>"')
      * ('%>"' | TRANSLATION_ERROR)
      */
-    private String parseAttributeValue(String watch) throws JasperException {
+    private String parseAttributeValue(String qName, String watch, boolean ignoreEL) throws JasperException {
+        boolean quoteAttributeEL = ctxt.getOptions().getQuoteAttributeEL();
         Mark start = reader.mark();
-        Mark stop = reader.skipUntilIgnoreEsc(watch);
+        // In terms of finding the end of the value, quoting EL is equivalent to
+        // ignoring it.
+        Mark stop = reader.skipUntilIgnoreEsc(watch, ignoreEL || quoteAttributeEL);
         if (stop == null) {
-            err.jspError(start, "jsp.error.attribute.unterminated", watch);
+            err.jspError(start, "jsp.error.attribute.unterminated", qName);
         }
 
         String ret = null;
@@ -276,7 +296,9 @@ class Parser implements TagConstants {
 
             ret = AttributeParser.getUnquoted(reader.getText(start, stop),
                     quote, isElIgnored,
-                    pageInfo.isDeferredSyntaxAllowedAsLiteral());
+                    pageInfo.isDeferredSyntaxAllowedAsLiteral(),
+                    ctxt.getOptions().getStrictQuoteEscaping(),
+                    quoteAttributeEL);
         } catch (IllegalArgumentException iae) {
             err.jspError(start, iae.getMessage());
         }
@@ -364,9 +386,7 @@ class Parser implements TagConstants {
      */
     private void addInclude(Node parent, Collection<String> files) throws JasperException {
         if (files != null) {
-            Iterator<String> iter = files.iterator();
-            while (iter.hasNext()) {
-                String file = iter.next();
+            for (String file : files) {
                 AttributesImpl attrs = new AttributesImpl();
                 attrs.addAttribute("", "file", "file", "CDATA", file);
 
@@ -1275,7 +1295,11 @@ class Parser implements TagConstants {
 
     /*
      * Parse for a template text string until '<' or "${" or "#{" is encountered,
-     * recognizing escape sequences "<\%", "\${", and "\#{".
+     * recognizing escape sequences "<\%", "\$", and "\#".
+     *
+     * Note: JSP uses '\$' as an escape for '$' and '\#' for '#' whereas EL uses
+     *       '\${' for '${' and '\#{' for '#{'. We are processing JSP template
+     *       test here so the JSP escapes apply.
      */
     private void parseTemplateText(Node parent) {
 
@@ -1304,13 +1328,7 @@ class Parser implements TagConstants {
             } else if (ch == '\\' && !pageInfo.isELIgnored()) {
                 int next = reader.peekChar(0);
                 if (next == '$' || next == '#') {
-                    if (reader.peekChar(1) == '{') {
-                        ttext.write(reader.nextChar());
-                        ttext.write(reader.nextChar());
-                    } else {
-                        ttext.write(ch);
-                        ttext.write(reader.nextChar());
-                    }
+                    ttext.write(reader.nextChar());
                 } else {
                     ttext.write(ch);
                 }
@@ -1362,10 +1380,7 @@ class Parser implements TagConstants {
                 } else if (ch == '\\') {
                     int next = reader.peekChar(0);
                     if (next == '$' || next =='#') {
-                        if (reader.peekChar(1) == '{') {
-                            ttext.write(reader.nextChar());
-                            ttext.write(reader.nextChar());
-                        }
+                        ttext.write(reader.nextChar());
                     } else {
                         ttext.write('\\');
                     }

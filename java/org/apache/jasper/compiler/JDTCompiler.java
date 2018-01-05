@@ -29,6 +29,7 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.StringTokenizer;
@@ -68,7 +69,7 @@ public class JDTCompiler extends org.apache.jasper.compiler.Compiler {
      * Compile the servlet from .java file to .class file
      */
     @Override
-    protected void generateClass(String[] smap)
+    protected void generateClass(Map<String,SmapStratum> smaps)
         throws FileNotFoundException, JasperException, Exception {
 
         long t1 = 0;
@@ -85,7 +86,7 @@ public class JDTCompiler extends org.apache.jasper.compiler.Compiler {
         final ClassLoader classLoader = ctxt.getJspLoader();
         String[] fileNames = new String[] {sourceFile};
         String[] classNames = new String[] {targetClassName};
-        final ArrayList<JavacErrorDetail> problemList = new ArrayList<>();
+        final List<JavacErrorDetail> problemList = new ArrayList<>();
 
         class CompilationUnit implements ICompilationUnit {
 
@@ -312,6 +313,9 @@ public class JDTCompiler extends org.apache.jasper.compiler.Compiler {
             } else if(opt.equals("1.8")) {
                 settings.put(CompilerOptions.OPTION_Source,
                              CompilerOptions.VERSION_1_8);
+            } else if(opt.equals("1.9")) {
+                settings.put(CompilerOptions.OPTION_Source,
+                             CompilerOptions.VERSION_1_9);
             } else {
                 log.warn("Unknown source VM " + opt + " ignored.");
                 settings.put(CompilerOptions.OPTION_Source,
@@ -358,6 +362,11 @@ public class JDTCompiler extends org.apache.jasper.compiler.Compiler {
                              CompilerOptions.VERSION_1_8);
                 settings.put(CompilerOptions.OPTION_Compliance,
                         CompilerOptions.VERSION_1_8);
+            } else if(opt.equals("1.9")) {
+                settings.put(CompilerOptions.OPTION_TargetPlatform,
+                             CompilerOptions.VERSION_1_9);
+                settings.put(CompilerOptions.OPTION_Compliance,
+                        CompilerOptions.VERSION_1_9);
             } else {
                 log.warn("Unknown target VM " + opt + " ignored.");
                 settings.put(CompilerOptions.OPTION_TargetPlatform,
@@ -410,12 +419,11 @@ public class JDTCompiler extends org.apache.jasper.compiler.Compiler {
                                 }
                                 byte[] bytes = classFile.getBytes();
                                 classFileName.append(".class");
-                                FileOutputStream fout =
-                                    new FileOutputStream(classFileName.toString());
-                                BufferedOutputStream bos =
-                                    new BufferedOutputStream(fout);
-                                bos.write(bytes);
-                                bos.close();
+                                try (FileOutputStream fout = new FileOutputStream(
+                                        classFileName.toString());
+                                        BufferedOutputStream bos = new BufferedOutputStream(fout)) {
+                                    bos.write(bytes);
+                                }
                             }
                         }
                     } catch (IOException exc) {
@@ -441,7 +449,10 @@ public class JDTCompiler extends org.apache.jasper.compiler.Compiler {
 
         if (!ctxt.keepGenerated()) {
             File javaFile = new File(ctxt.getServletJavaFileName());
-            javaFile.delete();
+            if (!javaFile.delete()) {
+                throw new JasperException(Localizer.getMessage(
+                        "jsp.warning.compiler.javafile.delete.fail", javaFile));
+            }
         }
 
         if (!problemList.isEmpty()) {
@@ -462,7 +473,7 @@ public class JDTCompiler extends org.apache.jasper.compiler.Compiler {
 
         // JSR45 Support
         if (! options.isSmapSuppressed()) {
-            SmapUtil.installSmap(smap);
+            SmapUtil.installSmap(smaps);
         }
     }
 }

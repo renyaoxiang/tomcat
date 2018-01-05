@@ -42,10 +42,7 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-
+import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.catalina.Context;
@@ -153,7 +150,8 @@ public class TestStandardWrapper extends TomcatBaseTest {
         Tomcat tomcat = getTomcatInstance();
 
         File appDir = new File("test/webapp-fragments");
-        tomcat.addWebapp(null, "", appDir.getAbsolutePath());
+        Context ctx = tomcat.addWebapp(null, "", appDir.getAbsolutePath());
+        skipTldsForResourceJars(ctx);
 
         tomcat.start();
 
@@ -163,8 +161,8 @@ public class TestStandardWrapper extends TomcatBaseTest {
                 "/testStandardWrapper/securityAnnotationsWebXmlPriority",
                 bc, null, null);
 
-        assertTrue(bc.getLength() > 0);
-        assertEquals(403, rc);
+        Assert.assertTrue(bc.getLength() > 0);
+        Assert.assertEquals(403, rc);
     }
 
     @Test
@@ -177,8 +175,8 @@ public class TestStandardWrapper extends TomcatBaseTest {
                 "/test/testStandardWrapper/securityAnnotationsMetaDataPriority",
                 bc, null, null);
 
-        assertEquals("OK", bc.toString());
-        assertEquals(200, rc);
+        Assert.assertEquals("OK", bc.toString());
+        Assert.assertEquals(200, rc);
     }
 
     @Test
@@ -206,8 +204,8 @@ public class TestStandardWrapper extends TomcatBaseTest {
         rc = getUrl("http://localhost:" + getPort() + "/",
                 bc, null, null);
 
-        assertTrue(bc.getLength() > 0);
-        assertEquals(403, rc);
+        Assert.assertTrue(bc.getLength() > 0);
+        Assert.assertEquals(403, rc);
     }
 
     @Test
@@ -225,16 +223,16 @@ public class TestStandardWrapper extends TomcatBaseTest {
         rc = getUrl("http://localhost:" + getPort() + "/protected.jsp",
                 bc, null, null);
 
-        assertTrue(bc.getLength() > 0);
-        assertEquals(403, rc);
+        Assert.assertTrue(bc.getLength() > 0);
+        Assert.assertEquals(403, rc);
 
         bc.recycle();
 
         rc = getUrl("http://localhost:" + getPort() + "/unprotected.jsp",
                 bc, null, null);
 
-        assertEquals(200, rc);
-        assertTrue(bc.toString().contains("00-OK"));
+        Assert.assertEquals(200, rc);
+        Assert.assertTrue(bc.toString().contains("00-OK"));
     }
 
     private void doTestSecurityAnnotationsAddServlet(boolean useCreateServlet)
@@ -257,11 +255,11 @@ public class TestStandardWrapper extends TomcatBaseTest {
         rc = getUrl("http://localhost:" + getPort() + "/", bc, null, null);
 
         if (useCreateServlet) {
-            assertTrue(bc.getLength() > 0);
-            assertEquals(403, rc);
+            Assert.assertTrue(bc.getLength() > 0);
+            Assert.assertEquals(403, rc);
         } else {
-            assertEquals("OK", bc.toString());
-            assertEquals(200, rc);
+            Assert.assertEquals("OK", bc.toString());
+            Assert.assertEquals(200, rc);
         }
     }
 
@@ -279,7 +277,7 @@ public class TestStandardWrapper extends TomcatBaseTest {
 
         Wrapper wrapper = Tomcat.addServlet(ctx, "servlet", servletClassName);
         wrapper.setAsyncSupported(true);
-        ctx.addServletMapping("/", "servlet");
+        ctx.addServletMappingDecoded("/", "servlet");
 
         if (useRole) {
             TesterMapRealm realm = new TesterMapRealm();
@@ -313,11 +311,11 @@ public class TestStandardWrapper extends TomcatBaseTest {
         }
 
         if (expect200) {
-            assertEquals("OK", bc.toString());
-            assertEquals(200, rc);
+            Assert.assertEquals("OK", bc.toString());
+            Assert.assertEquals(200, rc);
         } else {
-            assertTrue(bc.getLength() > 0);
-            assertEquals(403, rc);
+            Assert.assertTrue(bc.getLength() > 0);
+            Assert.assertEquals(403, rc);
         }
     }
 
@@ -410,7 +408,7 @@ public class TestStandardWrapper extends TomcatBaseTest {
     public static final int BUG51445_THREAD_COUNT = 5;
 
     public static CountDownLatch latch = null;
-    public static AtomicInteger counter = new AtomicInteger(0);
+    public static final AtomicInteger counter = new AtomicInteger(0);
 
     public static void initLatch() {
         latch = new CountDownLatch(BUG51445_THREAD_COUNT);
@@ -427,7 +425,7 @@ public class TestStandardWrapper extends TomcatBaseTest {
         Context ctx = tomcat.addContext("", null);
 
         Tomcat.addServlet(ctx, "Bug51445", new Bug51445Servlet());
-        ctx.addServletMapping("/", "Bug51445");
+        ctx.addServletMappingDecoded("/", "Bug51445");
 
         tomcat.start();
 
@@ -452,9 +450,9 @@ public class TestStandardWrapper extends TomcatBaseTest {
         // Check the result
         for (int i = 0; i < BUG51445_THREAD_COUNT; i ++) {
             String[] results = threads[i].getResult().split(",");
-            assertEquals(2, results.length);
-            assertEquals("10", results[0]);
-            assertFalse(servlets.contains(results[1]));
+            Assert.assertEquals(2, results.length);
+            Assert.assertEquals("10", results[0]);
+            Assert.assertFalse(servlets.contains(results[1]));
             servlets.add(results[1]);
         }
     }
@@ -473,7 +471,7 @@ public class TestStandardWrapper extends TomcatBaseTest {
         wrapper.setServletName("Bug51445");
         wrapper.setServletClass(Bug51445Servlet.class.getName());
         ctx.addChild(wrapper);
-        ctx.addServletMapping("/", "Bug51445");
+        ctx.addServletMappingDecoded("/", "Bug51445");
 
         tomcat.start();
 
@@ -497,9 +495,9 @@ public class TestStandardWrapper extends TomcatBaseTest {
         // Check the result
         for (int i = 0; i < BUG51445_THREAD_COUNT; i ++) {
             String[] results = threads[i].getResult().split(",");
-            assertEquals(2, results.length);
-            assertEquals("10", results[0]);
-            assertFalse(servlets.contains(results[1]));
+            Assert.assertEquals(2, results.length);
+            Assert.assertEquals("10", results[0]);
+            Assert.assertFalse(servlets.contains(results[1]));
             servlets.add(results[1]);
         }
     }

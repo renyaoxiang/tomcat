@@ -17,7 +17,6 @@
 package org.apache.juli.logging;
 
 import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
 import java.util.ServiceLoader;
 import java.util.logging.LogManager;
 
@@ -107,6 +106,8 @@ public class LogFactory {
      *  returned (the meaning of this name is only known to the underlying
      *  logging implementation that is being wrapped)
      *
+     * @return A log instance with the requested name
+     *
      * @exception LogConfigurationException if a suitable <code>Log</code>
      *  instance cannot be returned
      */
@@ -117,8 +118,7 @@ public class LogFactory {
 
         try {
             return discoveredLogConstructor.newInstance(name);
-        } catch (InstantiationException | IllegalAccessException | IllegalArgumentException |
-                InvocationTargetException e) {
+        } catch (ReflectiveOperationException | IllegalArgumentException e) {
             throw new LogConfigurationException(e);
         }
     }
@@ -129,6 +129,8 @@ public class LogFactory {
      * call <code>getInstance(String)</code> with it.
      *
      * @param clazz Class for which a suitable Log name will be derived
+     *
+     * @return A log instance with a name of clazz.getName()
      *
      * @exception LogConfigurationException if a suitable <code>Log</code>
      *  instance cannot be returned
@@ -166,6 +168,8 @@ public class LogFactory {
      * properties defined in this file will be set as configuration attributes
      * on the corresponding <code>LogFactory</code> instance.</p>
      *
+     * @return The singleton LogFactory instance
+     *
      * @exception LogConfigurationException if the implementation class is not
      *  available or cannot be instantiated.
      */
@@ -180,13 +184,14 @@ public class LogFactory {
      *
      * @param clazz Class from which a log name will be derived
      *
+     * @return A log instance with a name of clazz.getName()
+     *
      * @exception LogConfigurationException if a suitable <code>Log</code>
      *  instance cannot be returned
      */
     public static Log getLog(Class<?> clazz)
         throws LogConfigurationException {
-        return (getFactory().getInstance(clazz));
-
+        return getFactory().getInstance(clazz);
     }
 
 
@@ -198,13 +203,14 @@ public class LogFactory {
      *  returned (the meaning of this name is only known to the underlying
      *  logging implementation that is being wrapped)
      *
+     * @return A log instance with the requested name
+     *
      * @exception LogConfigurationException if a suitable <code>Log</code>
      *  instance cannot be returned
      */
     public static Log getLog(String name)
         throws LogConfigurationException {
-        return (getFactory().getInstance(name));
-
+        return getFactory().getInstance(name);
     }
 
 

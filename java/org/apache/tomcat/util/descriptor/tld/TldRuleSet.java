@@ -24,13 +24,13 @@ import javax.servlet.jsp.tagext.VariableInfo;
 
 import org.apache.tomcat.util.digester.Digester;
 import org.apache.tomcat.util.digester.Rule;
-import org.apache.tomcat.util.digester.RuleSetBase;
+import org.apache.tomcat.util.digester.RuleSet;
 import org.xml.sax.Attributes;
 
 /**
  * RulesSet for digesting TLD files.
  */
-public class TldRuleSet extends RuleSetBase {
+public class TldRuleSet implements RuleSet {
     private static final String PREFIX = "taglib";
     private static final String VALIDATOR_PREFIX = PREFIX + "/validator";
     private static final String TAG_PREFIX = PREFIX + "/tag";
@@ -352,6 +352,8 @@ public class TldRuleSet extends RuleSetBase {
 
         @Override
         public void body(String namespace, String name, String text) throws Exception {
+            if(null != text)
+                text = text.trim();
             boolean value = "true".equalsIgnoreCase(text) || "yes".equalsIgnoreCase(text);
             setter.invoke(digester.peek(), Boolean.valueOf(value));
         }

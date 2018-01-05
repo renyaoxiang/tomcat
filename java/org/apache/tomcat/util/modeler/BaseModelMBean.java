@@ -62,7 +62,7 @@ import org.apache.juli.logging.LogFactory;
  *    like Object and Class.
  *  - setModelMBean is no longer called on resources ( not used in tomcat )
  *  - no caching of Methods for now - operations and setters are not called repeatedly in most
- *  management use cases. Getters should't be called very frequently either - and even if they
+ *  management use cases. Getters shouldn't be called very frequently either - and even if they
  *  are, the overhead of getting the method should be small compared with other JMX costs ( RMI, etc ).
  *  We can add getter cache if needed.
  *  - removed unused constructor, fields
@@ -100,23 +100,10 @@ import org.apache.juli.logging.LogFactory;
  * @author Craig R. McClanahan
  * @author Costin Manolache
  */
-public class BaseModelMBean implements DynamicMBean, MBeanRegistration, ModelMBeanNotificationBroadcaster {
+public class BaseModelMBean implements DynamicMBean, MBeanRegistration,
+        ModelMBeanNotificationBroadcaster {
+
     private static final Log log = LogFactory.getLog(BaseModelMBean.class);
-
-    // ----------------------------------------------------------- Constructors
-
-    /**
-     * Construct a <code>ModelMBean</code> with default
-     * <code>ModelMBeanInfo</code> information.
-     *
-     * @exception MBeanException if the initializer of an object
-     *  throws an exception
-     * @exception RuntimeOperationsException if an IllegalArgumentException
-     *  occurs
-     */
-    protected BaseModelMBean() throws MBeanException, RuntimeOperationsException {
-        super();
-    }
 
     // ----------------------------------------------------- Instance Variables
 
@@ -208,7 +195,7 @@ public class BaseModelMBean implements DynamicMBean, MBeanRegistration, ModelMBe
 
         // Return the results of this method invocation
         // FIXME - should we validate the return type?
-        return (result);
+        return result;
     }
 
 
@@ -236,7 +223,7 @@ public class BaseModelMBean implements DynamicMBean, MBeanRegistration, ModelMBe
                 // is the indication of a getter problem
             }
         }
-        return (response);
+        return response;
 
     }
 
@@ -321,7 +308,7 @@ public class BaseModelMBean implements DynamicMBean, MBeanRegistration, ModelMBe
 
         // Return the results of this method invocation
         // FIXME - should we validate the return type?
-        return (result);
+        return result;
 
     }
 
@@ -484,7 +471,7 @@ public class BaseModelMBean implements DynamicMBean, MBeanRegistration, ModelMBe
             }
         }
 
-        return (getAttributes(names));
+        return getAttributes(names);
 
     }
 
@@ -496,6 +483,7 @@ public class BaseModelMBean implements DynamicMBean, MBeanRegistration, ModelMBe
      * Get the instance handle of the object against which we execute
      * all methods in this ModelMBean management interface.
      *
+     * @return the backend managed object
      * @exception InstanceNotFoundException if the managed resource object
      *  cannot be found
      * @exception InvalidTargetObjectTypeException if the managed resource
@@ -802,8 +790,6 @@ public class BaseModelMBean implements DynamicMBean, MBeanRegistration, ModelMBe
 
         // Acquire the set of application notifications
         MBeanNotificationInfo current[] = getMBeanInfo().getNotifications();
-        if (current == null)
-            current = new MBeanNotificationInfo[0];
         MBeanNotificationInfo response[] =
             new MBeanNotificationInfo[current.length + 2];
  //       Descriptor descriptor = null;
@@ -836,7 +822,7 @@ public class BaseModelMBean implements DynamicMBean, MBeanRegistration, ModelMBe
 
         // Copy remaining notifications as reported by the application
         System.arraycopy(current, 0, response, 2, current.length);
-        return (response);
+        return response;
 
     }
 

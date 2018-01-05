@@ -20,7 +20,6 @@ package org.apache.catalina.core;
 
 
 import java.io.Serializable;
-import java.lang.reflect.InvocationTargetException;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
@@ -59,7 +58,7 @@ public final class ApplicationFilterConfig implements FilterConfig, Serializable
 
     private static final long serialVersionUID = 1L;
 
-    protected static final StringManager sm =
+    static final StringManager sm =
         StringManager.getManager(Constants.Package);
 
     private static final Log log = LogFactory.getLog(ApplicationFilterConfig.class);
@@ -89,12 +88,12 @@ public final class ApplicationFilterConfig implements FilterConfig, Serializable
      *  instantiating the filter object
      * @exception ServletException if thrown by the filter's init() method
      * @throws NamingException
-     * @throws InvocationTargetException
+     * @throws SecurityException
+     * @throws IllegalArgumentException
      */
     ApplicationFilterConfig(Context context, FilterDef filterDef)
-        throws ClassCastException, ClassNotFoundException,
-               IllegalAccessException, InstantiationException,
-               ServletException, InvocationTargetException, NamingException {
+            throws ClassCastException, ReflectiveOperationException, ServletException,
+            NamingException, IllegalArgumentException, SecurityException {
 
         super();
 
@@ -149,11 +148,11 @@ public final class ApplicationFilterConfig implements FilterConfig, Serializable
      */
     @Override
     public String getFilterName() {
-        return (filterDef.getFilterName());
+        return filterDef.getFilterName();
     }
 
     /**
-     * Return the class of the filter we are configuring.
+     * @return The class of the filter we are configuring.
      */
     public String getFilterClass() {
         return filterDef.getFilterClass();
@@ -171,7 +170,7 @@ public final class ApplicationFilterConfig implements FilterConfig, Serializable
 
         Map<String,String> map = filterDef.getParameterMap();
         if (map == null) {
-            return (null);
+            return null;
         }
 
         return map.get(name);
@@ -211,15 +210,13 @@ public final class ApplicationFilterConfig implements FilterConfig, Serializable
      */
     @Override
     public String toString() {
-
         StringBuilder sb = new StringBuilder("ApplicationFilterConfig[");
         sb.append("name=");
         sb.append(filterDef.getFilterName());
         sb.append(", filterClass=");
         sb.append(filterDef.getFilterClass());
         sb.append("]");
-        return (sb.toString());
-
+        return sb.toString();
     }
 
     // --------------------------------------------------------- Public Methods
@@ -243,15 +240,16 @@ public final class ApplicationFilterConfig implements FilterConfig, Serializable
      *  instantiating the filter object
      * @exception ServletException if thrown by the filter's init() method
      * @throws NamingException
-     * @throws InvocationTargetException
+     * @throws ReflectiveOperationException
+     * @throws SecurityException
+     * @throws IllegalArgumentException
      */
-    Filter getFilter() throws ClassCastException, ClassNotFoundException,
-        IllegalAccessException, InstantiationException, ServletException,
-        InvocationTargetException, NamingException {
+    Filter getFilter() throws ClassCastException, ReflectiveOperationException, ServletException,
+            NamingException, IllegalArgumentException, SecurityException {
 
         // Return the existing filter instance, if any
         if (this.filter != null)
-            return (this.filter);
+            return this.filter;
 
         // Identify the class loader we will be using
         String filterClass = filterDef.getFilterClass();
@@ -259,7 +257,7 @@ public final class ApplicationFilterConfig implements FilterConfig, Serializable
 
         initFilter();
 
-        return (this.filter);
+        return this.filter;
 
     }
 
@@ -287,9 +285,7 @@ public final class ApplicationFilterConfig implements FilterConfig, Serializable
      * Return the filter definition we are configured for.
      */
     FilterDef getFilterDef() {
-
-        return (this.filterDef);
-
+        return this.filterDef;
     }
 
     /**
@@ -300,8 +296,7 @@ public final class ApplicationFilterConfig implements FilterConfig, Serializable
 
         unregisterJMX();
 
-        if (this.filter != null)
-        {
+        if (this.filter != null) {
             try {
                 if (Globals.IS_SECURITY_ENABLED) {
                     try {
@@ -321,12 +316,14 @@ public final class ApplicationFilterConfig implements FilterConfig, Serializable
             }
             if (!context.getIgnoreAnnotations()) {
                 try {
-                    ((StandardContext) context).getInstanceManager().destroyInstance(this.filter);
+                    context.getInstanceManager().destroyInstance(this.filter);
                 } catch (Exception e) {
                     Throwable t = ExceptionUtils
                             .unwrapInvocationTargetException(e);
                     ExceptionUtils.handleThrowable(t);
-                    context.getLogger().error("ApplicationFilterConfig.preDestroy", t);
+                    context.getLogger().error(
+                            sm.getString("applicationFilterConfig.preDestroy",
+                                    filterDef.getFilterName(), filterDef.getFilterClass()), t);
                 }
             }
         }
@@ -340,7 +337,7 @@ public final class ApplicationFilterConfig implements FilterConfig, Serializable
     private InstanceManager getInstanceManager() {
         if (instanceManager == null) {
             if (context instanceof StandardContext) {
-                instanceManager = ((StandardContext)context).getInstanceManager();
+                instanceManager = context.getInstanceManager();
             } else {
                 instanceManager = new DefaultInstanceManager(null,
                         new HashMap<String, Map<String, String>>(),

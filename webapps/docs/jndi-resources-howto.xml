@@ -433,7 +433,7 @@ public class MyBean2 {
     <h5>0.  Introduction</h5>
 
     <p>UserDatabase resources are typically configured as global resources for
-    use by a UserDatabase realm. Tomcat includes a UserDatabaseFactoory that
+    use by a UserDatabase realm. Tomcat includes a UserDatabaseFactory that
     creates UserDatabase resources backed by an XML file - usually
     <code>tomcat-users.xml</code></p>
 
@@ -448,7 +448,7 @@ public class MyBean2 {
     files are placed in <code>$CATALINA_BASE/conf</code>. A typical XML would
     look like:</p>
 
-<source><![CDATA[<?xml version='1.0' encoding='utf-8'?>
+<source><![CDATA[<?xml version="1.0" encoding="UTF-8"?>
 <tomcat-users>
   <role rolename="tomcat"/>
   <role rolename="role1"/>
@@ -471,8 +471,9 @@ public class MyBean2 {
           pathname="conf/tomcat-users.xml"
           readonly="false" />]]></source>
 
-    <p>The <code>pathname</code> attribute can be absolute or relative. If
-    relative, it is relative to <code>$CATALINA_BASE</code>.</p>
+    <p>The <code>pathname</code> attribute can be a URL, an absolute path or a
+    relative path. If relative, it is relative to <code>$CATALINA_BASE</code>.
+    </p>
 
     <p>The <code>readonly</code> attribute is optional and defaults to
     <code>true</code> if not supplied. If the XML is writeable then it will be
@@ -692,7 +693,7 @@ Transport.send(message);]]></source>
     Resource reference to a factory for java.sql.Connection
     instances that may be used for talking to a particular
     database that is configured in the <Context>
-    configurartion for the web application.
+    configuration for the web application.
   </description>
   <res-ref-name>
     jdbc/EmployeeDB
@@ -799,7 +800,7 @@ conn.close();]]></source>
         returned to the pool. Default: false</li>
     </ul>
     <p>The optional evictor thread is responsible for shrinking the pool
-    by removing any conections which are idle for a long time. The evictor
+    by removing any connections which are idle for a long time. The evictor
     does not respect <code>minIdle</code>. Note that you do not need to
     activate the evictor thread if you only want the pool to shrink according
     to the configured <code>maxIdle</code> property.</p>
@@ -810,7 +811,7 @@ conn.close();]]></source>
         milliseconds between consecutive runs of the evictor.
         Default: -1 (disabled)</li>
     <li><strong>numTestsPerEvictionRun</strong> - The number of connections
-        that will be checked for idleness by the evitor during each
+        that will be checked for idleness by the evictor during each
         run of the evictor. Default: 3</li>
     <li><strong>minEvictableIdleTimeMillis</strong> - The idle time in
         milliseconds after which a connection can be removed from the pool
@@ -888,7 +889,7 @@ conn.close();]]></source>
   <h4>1.  Write A Resource Factory Class</h4>
 
   <p>You must write a class that implements the JNDI service provider
-  <code>javax.naming.spi.ObjectFactory</code> inteface.  Every time your
+  <code>javax.naming.spi.ObjectFactory</code> interface.  Every time your
   web application calls <code>lookup()</code> on a context entry that is
   bound to this factory (assuming that the factory is configured with
   <code>singleton=&quot;false&quot;</code>), the
@@ -930,7 +931,7 @@ import javax.naming.spi.ObjectFactory;
 public class MyBeanFactory implements ObjectFactory {
 
   public Object getObjectInstance(Object obj,
-      Name name, Context nameCtx, Hashtable environment)
+      Name name2, Context nameCtx, Hashtable environment)
       throws NamingException {
 
       // Acquire an instance of our specified bean class
@@ -999,7 +1000,7 @@ public class MyBeanFactory implements ObjectFactory {
   <resource-env-ref-type>
     com.mycompany.MyBean
   </resource-env-ref-type>
-<resource-env-ref>]]></source>
+</resource-env-ref>]]></source>
 
     <p><strong>WARNING</strong> - Be sure you respect the element ordering
     that is required by the DTD for web application deployment descriptors!

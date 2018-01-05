@@ -16,7 +16,9 @@
  */
 package org.apache.tomcat.util.descriptor.web;
 
+import java.io.UnsupportedEncodingException;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -39,8 +41,12 @@ import javax.servlet.descriptor.TaglibDescriptor;
 
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
+import org.apache.tomcat.util.buf.B2CConverter;
+import org.apache.tomcat.util.buf.UDecoder;
 import org.apache.tomcat.util.descriptor.XmlIdentifiers;
+import org.apache.tomcat.util.digester.DocumentProperties;
 import org.apache.tomcat.util.res.StringManager;
+import org.apache.tomcat.util.security.Escape;
 
 /**
  * Representation of common elements of web.xml and web-fragment.xml. Provides
@@ -50,7 +56,7 @@ import org.apache.tomcat.util.res.StringManager;
  * This class checks for invalid duplicates (eg filter/servlet names)
  * StandardContext will check validity of values (eg URL formats etc)
  */
-public class WebXml {
+public class WebXml extends XmlEncodingBase implements DocumentProperties.Charset {
 
     protected static final String ORDER_OTHERS =
         "org.apache.catalina.order.others";
@@ -60,9 +66,11 @@ public class WebXml {
 
     private static final Log log = LogFactory.getLog(WebXml.class);
 
-    // Global defaults are overridable but Servlets and Servlet mappings need to
-    // be unique. Duplicates normally trigger an error. This flag indicates if
-    // newly added Servlet elements are marked as overridable.
+    /**
+     * Global defaults are overridable but Servlets and Servlet mappings need to
+     * be unique. Duplicates normally trigger an error. This flag indicates if
+     * newly added Servlet elements are marked as overridable.
+     */
     private boolean overridable = false;
     public boolean isOverridable() {
         return overridable;
@@ -71,8 +79,10 @@ public class WebXml {
         this.overridable = overridable;
     }
 
-    // web.xml only elements
-    // Absolute Ordering
+    /**
+     * web.xml only elements
+     * Absolute Ordering
+     */
     private Set<String> absoluteOrdering = null;
     public void createAbsoluteOrdering() {
         if (absoluteOrdering == null) {
@@ -91,8 +101,10 @@ public class WebXml {
         return absoluteOrdering;
     }
 
-    // web-fragment.xml only elements
-    // Relative ordering
+    /**
+     * web-fragment.xml only elements
+     * Relative ordering
+     */
     private final Set<String> after = new LinkedHashSet<>();
     public void addAfterOrdering(String fragmentName) {
         after.add(fragmentName);
@@ -120,7 +132,6 @@ public class WebXml {
     public Set<String> getBeforeOrdering() { return before; }
 
     // Common elements and attributes
-
     // Required attribute of web-app element
     public String getVersion() {
         StringBuilder sb = new StringBuilder(3);
@@ -153,6 +164,10 @@ public class WebXml {
             case "3.1":
                 majorVersion = 3;
                 minorVersion = 1;
+                break;
+            case "4.0":
+                majorVersion = 4;
+                minorVersion = 0;
                 break;
             default:
                 log.warn(sm.getString("webXml.version.unknown", version));
@@ -205,9 +220,9 @@ public class WebXml {
     }
 
     // Derived major and minor version attributes
-    // Default to 3.1 until we know otherwise
-    private int majorVersion = 3;
-    private int minorVersion = 1;
+    // Default to 4.0 until we know otherwise
+    private int majorVersion = 4;
+    private int minorVersion = 0;
     public int getMajorVersion() { return majorVersion; }
     public int getMinorVersion() { return minorVersion; }
 
@@ -299,9 +314,14 @@ public class WebXml {
     public Map<String,ServletDef> getServlets() { return servlets; }
 
     // servlet-mapping
+    // Note: URLPatterns from web.xml may be URL encoded
+    //       (http://svn.apache.org/r285186)
     private final Map<String,String> servletMappings = new HashMap<>();
     private final Set<String> servletMappingNames = new HashSet<>();
     public void addServletMapping(String urlPattern, String servletName) {
+        addServletMappingDecoded(UDecoder.URLDecode(urlPattern, getCharset()), servletName);
+    }
+    public void addServletMappingDecoded(String urlPattern, String servletName) {
         String oldServletName = servletMappings.put(urlPattern, servletName);
         if (oldServletName != null) {
             // Duplicate mapping. As per clarification from the Servlet EG,
@@ -335,6 +355,8 @@ public class WebXml {
     /**
      * When merging/parsing web.xml files into this web.xml should the current
      * set be completely replaced?
+     * @param replaceWelcomeFiles <code>true</code> to replace welcome files
+     *  rather than add to the list
      */
     public void setReplaceWelcomeFiles(boolean replaceWelcomeFiles) {
         this.replaceWelcomeFiles = replaceWelcomeFiles;
@@ -342,6 +364,7 @@ public class WebXml {
     /**
      * When merging from this web.xml, should the welcome files be added to the
      * target web.xml even if it already contains welcome file definitions.
+     * @param alwaysAddWelcomeFiles <code>true</code> to add welcome files
      */
     public void setAlwaysAddWelcomeFiles(boolean alwaysAddWelcomeFiles) {
         this.alwaysAddWelcomeFiles = alwaysAddWelcomeFiles;
@@ -381,6 +404,7 @@ public class WebXml {
     // jsp-config/jsp-property-group
     private final Set<JspPropertyGroup> jspPropertyGroups = new LinkedHashSet<>();
     public void addJspPropertyGroup(JspPropertyGroup propertyGroup) {
+        propertyGroup.setCharset(getCharset());
         jspPropertyGroups.add(propertyGroup);
     }
     public Set<JspPropertyGroup> getJspPropertyGroups() {
@@ -392,6 +416,7 @@ public class WebXml {
     // TODO: Should support multiple description elements with language
     private final Set<SecurityConstraint> securityConstraints = new HashSet<>();
     public void addSecurityConstraint(SecurityConstraint securityConstraint) {
+        securityConstraint.setCharset(getCharset());
         securityConstraints.add(securityConstraint);
     }
     public Set<SecurityConstraint> getSecurityConstraints() {
@@ -586,6 +611,36 @@ public class WebXml {
         return new JspConfigDescriptorImpl(descriptors, tlds);
     }
 
+    private String requestCharacterEncoding;
+    public String getRequestCharacterEncoding() {
+        return requestCharacterEncoding;
+    }
+    public void setRequestCharacterEncoding(String requestCharacterEncoding) {
+        if (requestCharacterEncoding != null) {
+            try {
+                B2CConverter.getCharset(requestCharacterEncoding);
+            } catch (UnsupportedEncodingException e) {
+                throw new IllegalArgumentException(e);
+            }
+        }
+        this.requestCharacterEncoding = requestCharacterEncoding;
+    }
+
+    private String responseCharacterEncoding;
+    public String getResponseCharacterEncoding() {
+        return responseCharacterEncoding;
+    }
+    public void setResponseCharacterEncoding(String responseCharacterEncoding) {
+        if (responseCharacterEncoding != null) {
+            try {
+                B2CConverter.getCharset(responseCharacterEncoding);
+            } catch (UnsupportedEncodingException e) {
+                throw new IllegalArgumentException(e);
+            }
+        }
+        this.responseCharacterEncoding = responseCharacterEncoding;
+    }
+
     // Attributes not defined in web.xml or web-fragment.xml
 
     // URL of JAR / exploded JAR for this web-fragment
@@ -631,7 +686,6 @@ public class WebXml {
      */
     public String toXml() {
         StringBuilder sb = new StringBuilder(2048);
-
         // TODO - Various, icon, description etc elements are skipped - mainly
         //        because they are ignored when web.xml is parsed - see above
 
@@ -676,6 +730,9 @@ public class WebXml {
             } else if ("3.1".equals(version)) {
                 javaeeNamespace = XmlIdentifiers.JAVAEE_7_NS;
                 webXmlSchemaLocation = XmlIdentifiers.WEB_31_XSD;
+            } else if ("4.0".equals(version)) {
+                javaeeNamespace = XmlIdentifiers.JAVAEE_8_NS;
+                webXmlSchemaLocation = XmlIdentifiers.WEB_40_XSD;
             }
             sb.append("<web-app xmlns=\"");
             sb.append(javaeeNamespace);
@@ -755,7 +812,7 @@ public class WebXml {
                     sb.append("    <url-pattern>*</url-pattern>\n");
                 } else {
                     for (String urlPattern : filterMap.getURLPatterns()) {
-                        appendElement(sb, INDENT4, "url-pattern", urlPattern);
+                        appendElement(sb, INDENT4, "url-pattern", encodeUrl(urlPattern));
                     }
                 }
                 // dispatcher was added in Servlet 2.4
@@ -846,7 +903,7 @@ public class WebXml {
         for (Map.Entry<String, String> entry : servletMappings.entrySet()) {
             sb.append("  <servlet-mapping>\n");
             appendElement(sb, INDENT4, "servlet-name", entry.getValue());
-            appendElement(sb, INDENT4, "url-pattern", entry.getKey());
+            appendElement(sb, INDENT4, "url-pattern", encodeUrl(entry.getKey()));
             sb.append("  </servlet-mapping>\n");
         }
         sb.append('\n');
@@ -895,16 +952,16 @@ public class WebXml {
         }
 
         for (ErrorPage errorPage : errorPages.values()) {
-            String exeptionType = errorPage.getExceptionType();
+            String exceptionType = errorPage.getExceptionType();
             int errorCode = errorPage.getErrorCode();
 
-            if (exeptionType == null && errorCode == 0 && getMajorVersion() == 2) {
+            if (exceptionType == null && errorCode == 0 && getMajorVersion() == 2) {
                 // Default error pages are only supported from 3.0 onwards
                 continue;
             }
             sb.append("  <error-page>\n");
             if (errorPage.getExceptionType() != null) {
-                appendElement(sb, INDENT4, "exception-type", exeptionType);
+                appendElement(sb, INDENT4, "exception-type", exceptionType);
             } else if (errorPage.getErrorCode() > 0) {
                 appendElement(sb, INDENT4, "error-code",
                         Integer.toString(errorCode));
@@ -930,7 +987,7 @@ public class WebXml {
                 for (JspPropertyGroup jpg : jspPropertyGroups) {
                     sb.append("    <jsp-property-group>\n");
                     for (String urlPattern : jpg.getUrlPatterns()) {
-                        appendElement(sb, INDENT6, "url-pattern", urlPattern);
+                        appendElement(sb, INDENT6, "url-pattern", encodeUrl(urlPattern));
                     }
                     appendElement(sb, INDENT6, "el-ignored", jpg.getElIgnored());
                     appendElement(sb, INDENT6, "page-encoding",
@@ -1025,7 +1082,7 @@ public class WebXml {
                 appendElement(sb, INDENT6, "description",
                         collection.getDescription());
                 for (String urlPattern : collection.findPatterns()) {
-                    appendElement(sb, INDENT6, "url-pattern", urlPattern);
+                    appendElement(sb, INDENT6, "url-pattern", encodeUrl(urlPattern));
                 }
                 for (String method : collection.findMethods()) {
                     appendElement(sb, INDENT6, "http-method", method);
@@ -1282,6 +1339,7 @@ public class WebXml {
                     sb.append("    </locale-encoding-mapping>\n");
                 }
                 sb.append("  </locale-encoding-mapping-list>\n");
+                sb.append("\n");
             }
         }
 
@@ -1289,14 +1347,30 @@ public class WebXml {
         if (getMajorVersion() > 3 ||
                 (getMajorVersion() == 3 && getMinorVersion() > 0)) {
             if (denyUncoveredHttpMethods) {
-                sb.append("\n");
                 sb.append("  <deny-uncovered-http-methods/>");
+                sb.append("\n");
             }
         }
 
+        // request-encoding and response-encoding was introduced in Servlet 4.0
+        if (getMajorVersion() >= 4) {
+            appendElement(sb, INDENT2, "request-character-encoding", requestCharacterEncoding);
+            appendElement(sb, INDENT2, "response-character-encoding", responseCharacterEncoding);
+        }
         sb.append("</web-app>");
         return sb.toString();
     }
+
+
+    private String encodeUrl(String input) {
+        try {
+            return URLEncoder.encode(input, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            // Impossible. UTF-8 is a required character set
+            return null;
+        }
+    }
+
 
     private static void appendElement(StringBuilder sb, String indent,
             String elementName, String value) {
@@ -1313,7 +1387,7 @@ public class WebXml {
             sb.append('<');
             sb.append(elementName);
             sb.append('>');
-            sb.append(escapeXml(value));
+            sb.append(Escape.xml(value));
             sb.append("</");
             sb.append(elementName);
             sb.append(">\n");
@@ -1324,33 +1398,6 @@ public class WebXml {
             String elementName, Object value) {
         if (value == null) return;
         appendElement(sb, indent, elementName, value.toString());
-    }
-
-
-    /**
-     * Escape the 5 entities defined by XML.
-     */
-    private static String escapeXml(String s) {
-        if (s == null)
-            return null;
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            if (c == '<') {
-                sb.append("&lt;");
-            } else if (c == '>') {
-                sb.append("&gt;");
-            } else if (c == '\'') {
-                sb.append("&apos;");
-            } else if (c == '&') {
-                sb.append("&amp;");
-            } else if (c == '"') {
-                sb.append("&quot;");
-            } else {
-                sb.append(c);
-            }
-        }
-        return sb.toString();
     }
 
 
@@ -1396,12 +1443,26 @@ public class WebXml {
         }
 
         // Note: Not permitted in fragments but we also use fragments for
-        //       per-Host and global defaults so it may appear there
+        //       per-Host and global defaults so they may appear there
         if (!denyUncoveredHttpMethods) {
             for (WebXml fragment : fragments) {
                 if (fragment.getDenyUncoveredHttpMethods()) {
                     denyUncoveredHttpMethods = true;
                     break;
+                }
+            }
+        }
+        if (requestCharacterEncoding == null) {
+            for (WebXml fragment : fragments) {
+                if (fragment.getRequestCharacterEncoding() != null) {
+                    requestCharacterEncoding = fragment.getRequestCharacterEncoding();
+                }
+            }
+        }
+        if (responseCharacterEncoding == null) {
+            for (WebXml fragment : fragments) {
+                if (fragment.getResponseCharacterEncoding() != null) {
+                    responseCharacterEncoding = fragment.getResponseCharacterEncoding();
                 }
             }
         }
@@ -1612,7 +1673,7 @@ public class WebXml {
 
         // Add fragment mappings
         for (Map.Entry<String,String> mapping : servletMappingsToAdd) {
-            addServletMapping(mapping.getKey(), mapping.getValue());
+            addServletMappingDecoded(mapping.getKey(), mapping.getValue());
         }
 
         for (WebXml fragment : fragments) {
